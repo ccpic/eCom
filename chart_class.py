@@ -29,6 +29,8 @@ MYFONT = fm.FontProperties(fname="C:/Windows/Fonts/msyh.ttc")
 NUM_FONT = {"fontname": "Calibri"}
 
 COLOR_DICT = {
+    "电商": "teal",
+    "零售": "grey",
     "京东": "crimson",
     "阿里": "darkgreen",
     "YTD": "navy",
@@ -599,7 +601,6 @@ class GridFigure(Figure):
             for (row, col), cell in table.get_celld().items():
                 if col == -1 or row == 0:
                     cell.set_text_props(fontproperties=MYFONT)
-                if col == -1 or row == 0:
                     cell.get_text().set_color("white")
                 cell.get_text().set_fontsize(12)
 

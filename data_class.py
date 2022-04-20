@@ -2,7 +2,7 @@ import numpy as np
 import pandas as pd
 import datetime
 from dateutil.relativedelta import relativedelta
-
+from typing import List
 
 FORMAT_ABS = "{:,.1f}"
 FORMAT_DIFF = "{:+,.1f}"
@@ -11,7 +11,7 @@ FORMAT_GR = "{:+.1%}"
 FORMAT_CURRENCY = "¥{:,.0f}"
 
 D_SORTER = {
-    "年月": pd.date_range("2020-01", "2022-02", freq="MS").strftime("%Y-%m").tolist(),
+    "年月": pd.date_range("2020-01", "2022-03", freq="MS").strftime("%Y-%m").tolist(),
     "YTD": ["去年同期", "YTD销售"],
     "主要客户": ["京东", "阿里", "北京德开", "广东健客", "四川泉源堂", "仁和集团", "广东亮健", "其他"],
 }
@@ -139,50 +139,50 @@ class DfAnalyzer(pd.DataFrame):
 
 class MonthlySalesAnalyzer(DfAnalyzer):
     @property
-    def date(self):
+    def date(self) -> datetime.datetime:
         date_str = self[self.date_column].max()
         return datetime.datetime(
             year=int(date_str[:4]), month=int(date_str[5:]), day=1
         )  # 最新月份
 
     @property
-    def date_ya(self):
+    def date_ya(self) -> datetime.datetime:
         return self.date.replace(year=self.date.year - 1)  # 同比月份
 
     @property
-    def date_year_begin(self):
+    def date_year_begin(self) -> datetime.datetime:
         return self.date.replace(month=1)  # 本年度开头
 
     @property
-    def date_ya_begin(self):
+    def date_ya_begin(self) -> datetime.datetime:
         return self.date_ya.replace(month=1)  # 去年开头
 
     @property
-    def date_mat_begin(self):
+    def date_mat_begin(self) -> datetime.datetime:
         return self.date + relativedelta(months=-11)  # 滚动年开头
 
     @property
-    def date_matya_begin(self):
+    def date_matya_begin(self) -> datetime.datetime:
         return self.date_ya + relativedelta(months=-11)  # 滚动年同比开头
 
     @property
-    def date_mqt_begin(self):
+    def date_mqt_begin(self) -> datetime.datetime:
         return self.date + relativedelta(months=-2)  # 滚动季开头
 
     @property
-    def date_mqtya_begin(self):
+    def date_mqtya_begin(self) -> datetime.datetime:
         return self.date_ya + relativedelta(months=-2)  # 滚动季同比开头
 
     @property
-    def date_mqtqa_begin(self):
+    def date_mqtqa_begin(self) -> datetime.datetime:
         return self.date + relativedelta(months=-5)  # 滚动季环比开头
 
     @property
-    def date_mqtqa_end(self):
+    def date_mqtqa_end(self) -> datetime.datetime:
         return self.date + relativedelta(months=-3)  # 滚动季环比结尾
 
     @property
-    def daterange(self):
+    def daterange(self) -> list:
         return (
             pd.date_range(
                 self[self.date_column].min(), self[self.date_column].max(), freq="MS"
@@ -192,7 +192,7 @@ class MonthlySalesAnalyzer(DfAnalyzer):
         )
 
     @property
-    def daterange_ytd(self):
+    def daterange_ytd(self) -> list:
         return (
             pd.date_range(self.date_year_begin, self.date, freq="MS")
             .strftime("%Y-%m")
@@ -200,7 +200,7 @@ class MonthlySalesAnalyzer(DfAnalyzer):
         )
 
     @property
-    def daterange_ytdya(self):
+    def daterange_ytdya(self) -> list:
         return (
             pd.date_range(self.date_ya_begin, self.date_ya, freq="MS")
             .strftime("%Y-%m")
@@ -208,7 +208,7 @@ class MonthlySalesAnalyzer(DfAnalyzer):
         )
 
     @property
-    def daterange_mat(self):
+    def daterange_mat(self) -> list:
         return (
             pd.date_range(self.date_mat_begin, self.date, freq="MS")
             .strftime("%Y-%m")
@@ -216,7 +216,7 @@ class MonthlySalesAnalyzer(DfAnalyzer):
         )
 
     @property
-    def daterange_matya(self):
+    def daterange_matya(self) -> list:
         return (
             pd.date_range(self.date_matya_begin, self.date_ya, freq="MS")
             .strftime("%Y-%m")
@@ -224,7 +224,7 @@ class MonthlySalesAnalyzer(DfAnalyzer):
         )
 
     @property
-    def daterange_mqt(self):
+    def daterange_mqt(self) -> list:
         return (
             pd.date_range(self.date_mqt_begin, self.date, freq="MS")
             .strftime("%Y-%m")
@@ -232,7 +232,7 @@ class MonthlySalesAnalyzer(DfAnalyzer):
         )
 
     @property
-    def daterange_mqtya(self):
+    def daterange_mqtya(self) -> list:
         return (
             pd.date_range(self.date_mqtya_begin, self.date_ya, freq="MS")
             .strftime("%Y-%m")
@@ -240,7 +240,7 @@ class MonthlySalesAnalyzer(DfAnalyzer):
         )
 
     @property
-    def daterange_mqtqa(self):
+    def daterange_mqtqa(self) -> list:
         return (
             pd.date_range(self.date_mqtqa_begin, self.date_mqtqa_end, freq="MS")
             .strftime("%Y-%m")
@@ -248,11 +248,11 @@ class MonthlySalesAnalyzer(DfAnalyzer):
         )
 
     @property
-    def daterange_mon(self):
+    def daterange_mon(self) -> list:
         return pd.date_range(self.date, self.date, freq="MS").strftime("%Y-%m").tolist()
 
     @property
-    def daterange_monya(self):
+    def daterange_monya(self) -> list:
         return (
             pd.date_range(self.date_ya, self.date_ya, freq="MS")
             .strftime("%Y-%m")
@@ -260,7 +260,7 @@ class MonthlySalesAnalyzer(DfAnalyzer):
         )
 
     @property
-    def daterange_monqa(self):
+    def daterange_monqa(self) -> list:
         return (
             pd.date_range(
                 self.date + relativedelta(months=-1),
@@ -271,7 +271,7 @@ class MonthlySalesAnalyzer(DfAnalyzer):
             .tolist()
         )
 
-    def filter_date(self, period: str, year_ago: bool = False):
+    def filter_date(self, period: str, year_ago: bool = False) -> pd.DataFrame:
         df = self.data
         df["Date"] = df[self.date_column].apply(
             lambda x: datetime.datetime(year=int(x[:4]), month=int(x[5:]), day=1)
@@ -316,16 +316,56 @@ class MonthlySalesAnalyzer(DfAnalyzer):
         else:
             return df.loc[mask, :]
 
+    def get_contrib_kpi(
+        self,
+        columns: str = None,
+        values: str = None,
+        aggfunc: str = None,
+        query_str: str = "ilevel_0 in ilevel_0",  # 默认query语句能返回df总体
+        perc: bool = False,
+        sort_values: bool = True,
+        dropna: bool = True,
+        fillna: bool = True,
+        **kwargs,
+    ) -> dict:
+        df = self.get_pivot(
+            index=self.date_column,
+            columns=columns,
+            values=values,
+            aggfunc=aggfunc,
+            query_str=query_str,
+            perc=False,
+            sort_values=sort_values,
+            dropna=dropna,
+            fillna=fillna,
+        )
+
+        dict_kpi = {}
+        dict_kpi["YTD"] = get_pivot_diff(
+            df=df, start_period=self.daterange_ytdya, end_period=self.daterange_ytd
+        )
+        dict_kpi["MAT"] = get_pivot_diff(
+            df=df, start_period=self.daterange_matya, end_period=self.daterange_mat
+        )
+        dict_kpi["MQT"] = get_pivot_diff(
+            df=df, start_period=self.daterange_mqtya, end_period=self.daterange_mqt
+        )
+        dict_kpi["MON"] = get_pivot_diff(
+            df=df, start_period=self.daterange_monya, end_period=self.daterange_mon
+        )
+        
+        return dict_kpi
+
     def get_kpi(
         self, query_str: str = "ilevel_0 in ilevel_0", unit: str = "金额"
-    ):  # 默认query语句能返回df总体
+    ) -> pd.DataFrame:  # 默认query语句能返回df总体
         df_value = self.get_pivot(
             index=self.date_column,
             values="销售金额（元）" if unit == "金额" else "销售盒数",
             aggfunc=sum,
             query_str=query_str,
         )
-
+        print(df_value)
         value_ytd = df_value.loc[self.daterange_ytd, :].sum().values[0]
         value_ytdya = df_value.loc[self.daterange_ytdya, :].sum().values[0]
         value_mat = df_value.loc[self.daterange_mat, :].sum().values[0]
@@ -421,6 +461,38 @@ class MonthlySalesAnalyzer(DfAnalyzer):
                 df_table.loc[idx, :] = df_table.loc[idx, :].map(FORMAT_ABS.format)
 
         return df_table
+
+
+def get_pivot_diff(
+    df: pd.DataFrame,
+    start_period: List[datetime.datetime],
+    end_period: List[datetime.datetime],
+    column_names: List[str] = ["贡献份额", "同比"],
+) -> pd.DataFrame:
+    """根据一个Index为时间戳的pandas series返回不同时间段的数据透视结果以及一组比较差值
+
+    Parameters
+    ----------
+    df : pd.DataFrame
+        Index为时间戳的pandas series数据
+    start_period : List[datetime.datetime]
+        一个包含被比较的起始时间段时间戳的list，list内的时间戳需要与df.index匹配
+    end_period : List[datetime.datetime]
+         一个包含结束时间段时间戳的list，list内的时间戳需要与df.index匹配
+    column_names : List[str], optional
+        返回的df的列名, by default ["贡献份额", "同比"]
+
+    Returns
+    -------
+    pd.DataFrame
+        计算后的pandas dataframe，行为pivot表头，列为metrics
+    """
+    df_end = df.loc[end_period, :].sum().to_frame().apply(lambda x: x / x.sum())
+    df_start = df.loc[start_period, :].sum().to_frame().apply(lambda x: x / x.sum())
+    df_end[1] = df_end[0].subtract(df_start[0])
+    df_end.columns = column_names
+
+    return df_end
 
 
 if __name__ == "__main__":
