@@ -365,7 +365,6 @@ class MonthlySalesAnalyzer(DfAnalyzer):
             aggfunc=sum,
             query_str=query_str,
         )
-        print(df_value)
         value_ytd = df_value.loc[self.daterange_ytd, :].sum().values[0]
         value_ytdya = df_value.loc[self.daterange_ytdya, :].sum().values[0]
         value_mat = df_value.loc[self.daterange_mat, :].sum().values[0]

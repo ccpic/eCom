@@ -16,6 +16,7 @@ import textwrap
 import math
 import matplotlib.dates as mdates
 import itertools
+from typing import List
 
 mpl.rcParams["font.sans-serif"] = ["SimHei"]
 mpl.rcParams["font.serif"] = ["SimHei"]
@@ -749,6 +750,91 @@ class GridFigure(Figure):
         return path
 
 
+# 继承基本类，线形图
+class PlotLine(GridFigure):
+    def plot(
+        self,
+        cols_showlabel: List[str] = [],
+        cols_focus: List[str] = [],
+        endpoint_label_only: bool = False,
+    ):
+        for j, ax in enumerate(self.axes):
+            df = self.data[j]
+            # Generate the lines
+            for i, column in enumerate(df.columns):
+                markerstyle = "o"
+                if column in cols_focus:
+                    markerstyle = "D"
+
+                # 如果有指定颜色就颜色，否则按预设列表选取
+                color = COLOR_DICT.get(column, COLOR_LIST[i])
+
+                ax.plot(
+                    df.index,
+                    df[column],
+                    color=color,
+                    linewidth=2,
+                    label=column,
+                    marker=markerstyle,
+                    markersize=5,
+                    markerfacecolor="white",
+                    markeredgecolor=color,
+                )
+
+                # 标签
+                if column in cols_showlabel:
+                    for k, idx in enumerate(df.index):
+                        if endpoint_label_only:
+                            if k == 0 or k == len(df.index) - 1:
+                                t = plt.text(
+                                    idx,
+                                    df.iloc[k, i],
+                                    self.fmt[j].format(df.iloc[k, i]),
+                                    ha="right" if k ==0 else "left",
+                                    va="center",
+                                    size="small",
+                                    color="white",
+                                )
+
+                                t.set_bbox(
+                                    dict(facecolor=color, alpha=0.7, edgecolor=color)
+                                )
+                        else:
+                            t = plt.text(
+                                idx,
+                                df.iloc[k, i],
+                                self.fmt[j].format(df.iloc[k, i]),
+                                ha="center",
+                                va="center",
+                                size="small",
+                                color="white",
+                            )
+                            t.set_bbox(
+                                dict(facecolor=color, alpha=0.7, edgecolor=color)
+                            )
+
+                # Customize the major grid
+                ax.grid(which="major", linestyle=":", linewidth="0.5", color="grey")
+
+                # y轴标签格式
+                ax.yaxis.set_major_formatter(
+                    FuncFormatter(lambda y, _: self.fmt[j].format(y))
+                )
+
+                # Shrink current axis by 20% and put a legend to the right of the current axis
+                box = ax.get_position()
+                ax.set_position([box.x0, box.y0, box.width * 0.8, box.height])
+                ax.legend(
+                    loc="center left",
+                    bbox_to_anchor=(1, 0.5),
+                    labelspacing=1.5,
+                    frameon=False,
+                    prop={"family": "SimHei", "size": self.fontsize},
+                )
+
+        return self.save()
+
+
 # 继承基本类，饼图类
 class PlotPie(GridFigure):
     def plot(self, donut: bool = True, donut_title: list = [""]):
@@ -775,10 +861,7 @@ class PlotPie(GridFigure):
 
             for i, pie_wedge in enumerate(wedges):
                 # 如果有指定颜色就颜色，否则按预设列表选取
-                if pie_wedge.get_label() in COLOR_DICT.keys():
-                    color = COLOR_DICT[pie_wedge.get_label()]
-                else:
-                    color = COLOR_LIST[i]
+                color = COLOR_DICT.get(pie_wedge.get_label(), COLOR_LIST[i])
 
                 pie_wedge.set_facecolor(color)
 

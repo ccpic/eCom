@@ -1,7 +1,14 @@
+from pyparsing import col
 import numpy as np
 import pandas as pd
 from data_class import MonthlySalesAnalyzer
-from chart_class import PlotStackedBar, PlotStackedBarPlus, PlotHeatGrid
+from chart_class import (
+    COLOR_DICT,
+    PlotLine,
+    PlotStackedBar,
+    PlotStackedBarPlus,
+    PlotHeatGrid,
+)
 import matplotlib as mpl
 import matplotlib.pyplot as plt
 import datetime
@@ -25,6 +32,104 @@ QUERY_STR_MAP = {
     "主要产品=='泰嘉' and 主要客户=='京东'": "京东-泰嘉",
     "主要产品=='泰嘉' and 主要客户=='阿里'": "阿里-泰嘉",
 }
+TABLE_RIGHT_2ITEMS = {
+    "top": Cm(4.9),
+    "left": Cm(26.5),
+    "width": Cm(7),
+    "height": Cm(10.7),
+    "merge_cells": (
+        ((0, 0), (1, 0)),
+        ((2, 0), (3, 0)),
+        ((4, 0), (5, 0)),
+        ((6, 0), (7, 0)),
+    ),
+    "cell_color": {
+        (0, 0): RGBColor(0, 0, 128),
+        (2, 0): RGBColor(65, 105, 225),
+        (4, 0): RGBColor(30, 144, 255),
+        (6, 0): RGBColor(0, 191, 255),
+    },
+    "font_color": {
+        (0, 0): RGBColor(255, 255, 255),
+        (2, 0): RGBColor(255, 255, 255),
+        (4, 0): RGBColor(255, 255, 255),
+        (6, 0): RGBColor(255, 255, 255),
+    },
+}
+
+TABLE_RIGHT_3ITEMS = {
+    "top": Cm(4.9),
+    "left": Cm(26.5),
+    "width": Cm(7),
+    "height": Cm(10.7),
+    "merge_cells": (
+        ((0, 0), (2, 0)),
+        ((3, 0), (5, 0)),
+        ((6, 0), (8, 0)),
+        ((9, 0), (11, 0)),
+    ),
+    "cell_color": {
+        (0, 0): RGBColor(0, 0, 128),
+        (3, 0): RGBColor(65, 105, 225),
+        (6, 0): RGBColor(30, 144, 255),
+        (9, 0): RGBColor(0, 191, 255),
+    },
+    "font_color": {
+        (0, 0): RGBColor(255, 255, 255),
+        (3, 0): RGBColor(255, 255, 255),
+        (6, 0): RGBColor(255, 255, 255),
+        (9, 0): RGBColor(255, 255, 255),
+    },
+}
+
+TEXTBOX_TABLE_TITLE = {
+    "text": "贡献份额及同比变化汇总",
+    "top": Cm(4.05),
+    "left": Cm(27),
+    "width": Cm(6),
+    "height": Cm(0.86),
+    "fontsize": Pt(12),
+}
+
+
+def get_contrib_table(
+    sales: MonthlySalesAnalyzer,
+    columns: str,
+    values: str = "销售金额（元）",
+    query_str: str = "ilevel_0 in ilevel_0",
+) -> pd.DataFrame:
+    """将不同时间段的不同项目贡献度及变化汇总为表格
+
+    Parameters
+    ----------
+    sales : MonthlySalesAnalyzer
+        一个月度销售分析模块的实例
+    columns : str
+        拆分数据的表头，即数据透视的列名
+    values : str, optional
+        数据透视的汇总值, by default "销售金额（元）"
+    query_str: str, optional
+        取数范围，pandas query语句的条件，类似SQL的WHERE, by default "ilevel_0 in ilevel_0",即不做筛选
+
+    Returns
+    -------
+    pd.DataFrame
+        一个含不同时间段贡献度及变化的pandas dataframe
+    """
+
+    dict_contrib = sales.get_contrib_kpi(
+        index="年月", columns=columns, values=values, aggfunc=sum, query_str=query_str
+    )
+    df_contrib = pd.DataFrame()
+    for k, v in dict_contrib.items():
+        v.reset_index(inplace=True)
+        v["周期"] = k
+        v = v.reindex(columns=["周期", "index", "贡献份额", "同比"])
+        v["贡献份额"] = v["贡献份额"].map("{:.1%}".format)
+        v["同比"] = v["同比"].map("{:+.1%}".format)
+        df_contrib = pd.concat([df_contrib, v])
+
+    return df_contrib
 
 
 class MonthlySalesPPT(object):
@@ -179,8 +284,7 @@ class MonthlySalesPPT(object):
                 obj_img.left = (self.prs.slide_width - obj_img.width) / 2  # 默认图片居中
 
         # 插入表格
-        tables = kwargs.get("tables", None)
-        print(tables)
+        tables = kwargs.get("tables")
         if tables is not None:
             for table in tables:
                 table_data = table.get("data")
@@ -198,11 +302,15 @@ class MonthlySalesPPT(object):
                 # 写入数据文本
                 for i, row in enumerate(obj_table.rows):
                     for j, cell in enumerate(row.cells):
-                        cell.vertical_anchor = MSO_VERTICAL_ANCHOR.MIDDLE # 单元格文本居中（纵向）
+                        cell.vertical_anchor = MSO_VERTICAL_ANCHOR.MIDDLE  # 单元格文本居中（纵向）
                         obj_table.cell(i, j).text = table_data.iloc[i, j]
                         for paragraph in cell.text_frame.paragraphs:
-                            paragraph.alignment = PP_ALIGN.CENTER # 单元格文本居中（横向）
-                            paragraph.runs[0].font.size = Pt(11)
+                            paragraph.alignment = PP_ALIGN.CENTER  # 单元格文本居中（横向）
+                            paragraph.runs[0].font.size = table.get("fontsize", Pt(11))
+                            if table_data.iloc[i, j][0] == "+":  # 正值着绿色
+                                paragraph.runs[0].font.color.rgb = RGBColor(0, 176, 80)
+                            elif table_data.iloc[i, j][0] == "-":  # 负值着红色
+                                paragraph.runs[0].font.color.rgb = RGBColor(255, 0, 0)
 
                 # 表格总样式
                 tbl_pr = shape_table._element.graphic.graphicData.tbl
@@ -214,14 +322,18 @@ class MonthlySalesPPT(object):
                 if "cell_color" in table:
                     for cell_xy, cell_color in table["cell_color"].items():
                         obj_table.cell(cell_xy[0], cell_xy[1]).fill.solid()
-                        obj_table.cell(cell_xy[0], cell_xy[1]).fill.fore_color.rgb = cell_color
-                        
+                        obj_table.cell(
+                            cell_xy[0], cell_xy[1]
+                        ).fill.fore_color.rgb = cell_color
+
                 # 字体颜色
                 if "font_color" in table:
                     for cell_xy, font_color in table["font_color"].items():
-                        for paragraph in  obj_table.cell(cell_xy[0], cell_xy[1]).text_frame.paragraphs:
-                            paragraph.runs[0].font.color.RGB = font_color
-                        
+                        for paragraph in obj_table.cell(
+                            cell_xy[0], cell_xy[1]
+                        ).text_frame.paragraphs:
+                            paragraph.runs[0].font.color.rgb = font_color
+
                 # 处理合并单元格的事宜
                 if "merge_cells" in table:
                     for merge_cell in table["merge_cells"]:
@@ -229,7 +341,12 @@ class MonthlySalesPPT(object):
                         cell1_col = merge_cell[0][1]
                         cell2_row = merge_cell[1][0]
                         cell2_col = merge_cell[1][1]
-                        obj_table.cell(cell2_row, cell2_col).text = ""  # 被merge的对象删除文本
+                        for i in range(cell2_row, cell1_row - 1, -1):
+                            for j in range(cell2_col, cell1_col - 1, -1):
+                                if i != cell1_row or j != cell1_col:
+                                    obj_table.cell(
+                                        i, j
+                                    ).text = ""  # 被merge的单元格们只保留左上角主体单元格的文本
                         obj_table.cell(cell1_row, cell1_col).merge(
                             obj_table.cell(cell2_row, cell2_col)
                         )  # 根据指定左上和右下的单元格merge
@@ -239,10 +356,26 @@ class MonthlySalesPPT(object):
                         self.prs.slide_width - shape_table.width
                     ) / 2  # 默认表格居中
 
+        # 插入文本框
+        textboxes = kwargs.get("textboxes")
+        if textboxes is not None:
+            for textbox in textboxes:
+                obj_textbox = slide.shapes.add_textbox(
+                    top=textbox.get("top", IMAGE_TOP),
+                    left=textbox.get("left", 0),
+                    width=textbox.get("width", self.prs.slide_width),
+                    height=textbox.get("height", Cm(1)),
+                )
+                text_frame = obj_textbox.text_frame
+                p = text_frame.paragraphs[0]
+                p.text = textbox.get("text", "")
+                p.font.size = textbox.get("fontsize", Pt(11))
+                p.alignment = textbox.get("alignment", PP_ALIGN.CENTER)
+
         print("Page%s" % str(int(self.prs.slides.index(slide)) + 1))
 
 
-def prepare_data(data_old: str, data_new: str) -> pd.DataFrame:
+def prepare_data(data_old: str, data_new: str, sheet_name: str) -> pd.DataFrame:
     """清洗数据
 
     Parameters
@@ -251,6 +384,8 @@ def prepare_data(data_old: str, data_new: str) -> pd.DataFrame:
         2020&2021年数据的路径
     data_new : str
         ytd新数据的路径
+    sheet_name: str
+        数据中的工作表，有2个选项"达成率"和"分品规"，只有达成率表有指标
 
     Returns
     -------
@@ -287,26 +422,27 @@ def prepare_data(data_old: str, data_new: str) -> pd.DataFrame:
         "苏州纳百特大药房有限公司（平安好医生）": "平安好医生",
         "阿里健康大药房医药连锁有限公司（信立泰旗舰店）": "阿里",
     }
-    df_old = pd.read_excel(data_old, sheet_name="达成率", engine="openpyxl")
-    df_ytd = pd.read_excel(data_new, sheet_name="达成率", engine="openpyxl")
+    df_old = pd.read_excel(data_old, sheet_name=sheet_name, engine="openpyxl")
+    df_ytd = pd.read_excel(data_new, sheet_name=sheet_name, engine="openpyxl")
     df = pd.concat([df_old, df_ytd])
     mask = df["事业部"] == "零售事业部"
     df.loc[mask, "事业部"] = "零售"
-
-    df.rename(columns={"总销量": "销售盒数", "指标数量": "指标盒数"}, inplace=True)
     df["年月"] = df["年月"].apply(lambda x: str(x)[:4] + "-" + str(x)[4:])
-    # df["年月"] = df["年月"].apply(
-    #     lambda x: datetime.datetime(year=int(str(x)[:4]), month=int(str(x)[4:]), day=1)
-    # )  # 修改日期列格式
-    df["销售金额（万元）"] = df["销售金额（元）"] / 10000
-    df["销售盒数（万盒）"] = df["销售盒数"] / 10000
-    df["指标金额（万元）"] = df["指标金额（元）"] / 10000
-    df["指标盒数（万盒）"] = df["指标盒数"] / 10000
-
     df["主要产品"] = df["品名"].apply(lambda x: "其他" if x not in ["信立坦", "泰嘉"] else x)
     df["客户"] = df["客户名称"].map(D_CLIENT_MAP)
-    print(df["客户"].unique())
     df["主要客户"] = df["客户"].apply(lambda x: "其他" if x not in ["京东", "阿里"] else x)
+
+    if sheet_name == "达成率":
+        df.rename(columns={"总销量": "销售盒数", "指标数量": "指标盒数"}, inplace=True)
+        df["指标金额（万元）"] = df["指标金额（元）"] / 10000
+        df["指标盒数（万盒）"] = df["指标盒数"] / 10000
+    else:
+        df.rename(
+            columns={"标准数量": "销售盒数", "当期销售金额": "销售金额（元）", "商品全称": "品规"}, inplace=True
+        )
+
+    df["销售金额（万元）"] = df["销售金额（元）"] / 10000
+    df["销售盒数（万盒）"] = df["销售盒数"] / 10000
 
     return df
 
@@ -355,6 +491,56 @@ def plot_grid_metrics(
     )
 
     return f.plot(show_label=False, show_total_label=True)
+
+
+def plot_ratio_trend(
+    sales: MonthlySalesAnalyzer,
+    df_netsales: pd.DataFrame,
+    product: str,
+    query_str: str,
+    unit: str = "金额",
+    width: float = 15,
+    height: float = 6,
+):
+
+    # 单位
+    metric_sales = "销售金额（元）" if unit == "金额" else "销售盒数"
+
+    df_contrib = pd.DataFrame()
+    series_ecom = sales.get_pivot(
+        index="年月", values=metric_sales, query_str=query_str, aggfunc=sum
+    )[metric_sales]
+    df_contrib["MAT"] = (
+        series_ecom.rolling(12)
+        .sum()
+        .div(df_netsales[f"{product}-{unit}"].rolling(12).sum())
+    )
+    df_contrib["MQT"] = (
+        series_ecom.rolling(3)
+        .sum()
+        .div(df_netsales[f"{product}-{unit}"].rolling(3).sum())
+    )
+    df_contrib["MON"] = series_ecom.div(df_netsales[f"{product}-{unit}"])
+    df_contrib = df_contrib.iloc[12:, :]
+
+    title = f"电商渠道在{product}整体发货中的贡献月度趋势 - {unit}"
+    fmt = [".1%"]
+    f = plt.figure(
+        FigureClass=PlotLine,
+        savepath=sales.savepath,
+        data=df_contrib,
+        fmt=fmt,
+        width=width,
+        height=height,
+        style={
+            "title": title,
+            # "remove_yticks": True,
+            "xlabel_rotation": 90,
+            "ylabel": "电商渠道贡献份额",
+        },
+    )
+
+    return f.plot(cols_showlabel=df_contrib.columns, endpoint_label_only=True)
 
 
 def plot_sales_trend(
@@ -461,14 +647,19 @@ def plot_sales_trend(
 if __name__ == "__main__":
     # 数据
     df = prepare_data(
-        data_old="raw data\现有架构看历史数据.xlsx", data_new="raw data\Q1零售事业部&电商达成率表-核对初版.xlsx"
+        data_old="raw data\现有架构看历史数据.xlsx",
+        data_new="raw data\Q1零售事业部&电商达成率表-核对初版.xlsx",
+        sheet_name="达成率",
     )
     df_ecom = df[df["事业部"] == "电商"]
-    print(df_ecom["客户"].unique())
     df_retail = df[df["事业部"] == "零售事业部"]
     sales = MonthlySalesAnalyzer(data=df, name="零售+电商销售", date_column="年月")
     sales_ecom = MonthlySalesAnalyzer(data=df_ecom, name="电商销售", date_column="年月")
     month_str = sales_ecom.date.strftime("%Y%m")
+
+    df_netsales = pd.read_excel("netsales.xlsx", sheet_name="data", engine="openpyxl")
+    df_netsales["年月"] = df_netsales["年月"].apply(lambda x: str(x)[:4] + "-" + str(x)[4:])
+    df_netsales.set_index("年月", inplace=True)
 
     # 创建新ppt实例
     ppt = MonthlySalesPPT(
@@ -478,7 +669,7 @@ if __name__ == "__main__":
     # 母版
     slide = ppt.prs.slide_layouts[0]
     note = slide.shapes[5].text_frame.paragraphs[0]
-    note.text = f"数据源: 电商发货数据202001-{month_str}"
+    note.text = f"数据源: 电商发货数据202001-{month_str}, 当前客户看历史"
     font = note.runs[0].font
     font.italic = True
     font.size = Pt(8)
@@ -530,21 +721,38 @@ if __name__ == "__main__":
         labels=["所有产品", "所有平台", unit],
     )
 
-    # Page3 - 零售vs.电商目标终端销售贡献月度趋势 - 金额
+    # Page3 - 电商渠道在信立泰整体发货中的贡献月度趋势 - 金额
+    COLOR_DICT["MAT"] = "teal"
+    COLOR_DICT["MQT"] = "crimson"
+    COLOR_DICT["MON"] = "navy"
+    
+    product = "信立泰"
+    unit = "金额"
+    ppt.add_img_slide(
+        title=f"电商渠道在{product}整体发货中的贡献月度趋势 - {unit}",
+        imgs=[
+            {
+                "image_file": plot_ratio_trend(
+                    sales=sales_ecom,
+                    df_netsales=df_netsales,
+                    product=product,
+                    query_str=query_str,
+                    unit=unit,
+                ),
+            }
+        ],
+        labels=["所有产品", "所有平台", unit],
+    )
+    
+    COLOR_DICT["MAT"] = "royalblue"
+    COLOR_DICT["MQT"] = "dodgerblue"
+    COLOR_DICT["MON"] = "deepskyblue"
+    
+    # Page4 - 零售vs.电商目标终端销售贡献月度趋势 - 金额
     column = "事业部"
 
-    # 计算不同时间段的kpi
-    dict_contrib = sales.get_contrib_kpi(
-        index="年月", columns="事业部", values="销售金额（元）", aggfunc=sum
-    )
-    df_contrib = pd.DataFrame()
-    for k, v in dict_contrib.items():
-        v.reset_index(inplace=True)
-        v["周期"] = k
-        v = v.reindex(columns=["周期", "index", "贡献份额", "同比"])
-        v["贡献份额"] = v["贡献份额"].map("{:.1%}".format)
-        v["同比"] = v["同比"].map("{:+.1%}".format)
-        df_contrib = pd.concat([df_contrib, v])
+    # 计算不同时间段贡献份额的kpi
+    df_contrib = get_contrib_table(sales=sales, columns=column)
 
     ppt.add_img_slide(
         title=f"零售vs.电商目标终端销售贡献月度趋势 - {unit}",
@@ -555,14 +763,13 @@ if __name__ == "__main__":
                     query_str=query_str,
                     show_target=False,
                     column=column,
-                    width=12,
+                    width=13,
                     height=4,
                     show_total_label=True,
                     label_threshold=20,
                     title=f"零售vs.电商目标终端销售贡献月度趋势 - {unit}",
                 ),
-                "width": Cm(24),
-                "left": Cm(1),
+                "width": Cm(26),
             },
             {
                 "image_file": plot_sales_trend(
@@ -570,264 +777,388 @@ if __name__ == "__main__":
                     query_str=query_str,
                     show_target=False,
                     column=column,
-                    width=12,
+                    width=13,
                     height=4,
                     plot_share=True,
                     label_threshold=0.01,
                     show_title=False,
                 ),
-                "width": Cm(24),
-                "left": Cm(1),
+                "width": Cm(26),
                 "top": Cm(10.58),
             },
         ],
         labels=["所有产品", "零售+电商", unit],
-        tables=[
-            {
-                "data": df_contrib,
-                "top": Cm(4.74),
-                "left": Cm(26),
-                "width": Cm(6),
-                "height": Cm(10.7),
-                "merge_cells": (
-                    ((0, 0), (1, 0)),
-                    ((2, 0), (3, 0)),
-                    ((4, 0), (5, 0)),
-                    ((6, 0), (7, 0)),
-                ),
-                "cell_color": {(2, 0): RGBColor(65, 105, 225)},
-                "font_color": {(2, 0): RGBColor(255, 255, 255)},
-            }
-        ],
+        tables=[{**TABLE_RIGHT_2ITEMS, **{"data": df_contrib}}],
+        textboxes=[TEXTBOX_TABLE_TITLE],
     )
 
-    # # Page4 - 电商渠道主要产品贡献月度趋势 - 金额
-    # column = "主要产品"
-    # ppt.add_img_slide(
-    #     title=f"电商渠道{column}贡献月度趋势 - {unit}",
-    #     imgs=[
-    #         {
-    #             "image_file": plot_sales_trend(
-    #                 sales=sales_ecom,
-    #                 query_str=query_str,
-    #                 show_target=False,
-    #                 column=column,
-    #                 height=4,
-    #                 show_total_label=True,
-    #                 label_threshold=20,
-    #             ),
-    #             "width": Cm(32),
-    #         },
-    #         {
-    #             "image_file": plot_sales_trend(
-    #                 sales=sales_ecom,
-    #                 query_str=query_str,
-    #                 show_target=False,
-    #                 column=column,
-    #                 height=4,
-    #                 plot_share=True,
-    #                 label_threshold=0.03,
-    #                 show_title=False,
-    #             ),
-    #             "width": Cm(32),
-    #             "top": Cm(10.58),
-    #         },
-    #     ],
-    #     labels=["分产品", "所有平台", unit],
-    # )
+    # Page5 - 电商渠道主要产品贡献月度趋势 - 金额
+    column = "主要产品"
 
-    # # Page5 - 电商渠道主要产品贡献月度趋势 - 金额
-    # column = "主要客户"
-    # ppt.add_img_slide(
-    #     title=f"电商渠道{column}贡献月度趋势 - {unit}",
-    #     imgs=[
-    #         {
-    #             "image_file": plot_sales_trend(
-    #                 sales=sales_ecom,
-    #                 query_str=query_str,
-    #                 show_target=False,
-    #                 column=column,
-    #                 height=4,
-    #                 show_total_label=True,
-    #                 label_threshold=20,
-    #             ),
-    #             "width": Cm(32),
-    #         },
-    #         {
-    #             "image_file": plot_sales_trend(
-    #                 sales=sales_ecom,
-    #                 query_str=query_str,
-    #                 show_target=False,
-    #                 column=column,
-    #                 height=4,
-    #                 plot_share=True,
-    #                 label_threshold=0.03,
-    #                 show_title=False,
-    #             ),
-    #             "width": Cm(32),
-    #             "top": Cm(10.58),
-    #         },
-    #     ],
-    #     labels=["所有产品", "分平台", unit],
-    # )
+    # 计算不同时间段贡献份额的kpi
+    df_contrib = get_contrib_table(sales=sales_ecom, columns=column)
 
-    # # Page6, 7, 8 - 京东平台销售达成月度趋势及KPIs - 金额
-    # for platform in ["京东", "阿里", "其他"]:
-    #     query_str = f"主要客户=='{platform}'"
-    #     ppt.add_img_slide(
-    #         title=f"{platform}平台销售达成月度趋势及KPIs - {unit}",
-    #         imgs=[
-    #             {
-    #                 "image_file": plot_sales_trend(
-    #                     sales=sales_ecom,
-    #                     query_str=query_str,
-    #                     column=None,
-    #                     show_table=True,
-    #                     height=3,
-    #                     unit=unit,
-    #                     show_label=False,
-    #                     show_total_label=True,
-    #                 ),
-    #             }
-    #         ],
-    #         labels=["所有产品", platform, unit],
-    #     )
+    ppt.add_img_slide(
+        title=f"电商渠道{column}贡献月度趋势 - {unit}",
+        imgs=[
+            {
+                "image_file": plot_sales_trend(
+                    sales=sales_ecom,
+                    query_str=query_str,
+                    show_target=False,
+                    column=column,
+                    width=13,
+                    height=4,
+                    show_total_label=True,
+                    label_threshold=20,
+                ),
+                "width": Cm(26),
+            },
+            {
+                "image_file": plot_sales_trend(
+                    sales=sales_ecom,
+                    query_str=query_str,
+                    show_target=False,
+                    column=column,
+                    width=13,
+                    height=4,
+                    plot_share=True,
+                    label_threshold=0.03,
+                    show_title=False,
+                ),
+                "width": Cm(26),
+                "top": Cm(10.58),
+            },
+        ],
+        labels=["分产品", "所有平台", unit],
+        tables=[{**TABLE_RIGHT_3ITEMS, **{"data": df_contrib}}],
+        textboxes=[TEXTBOX_TABLE_TITLE],
+    )
 
-    # # Page9-29 - 信立坦、泰嘉明细
-    # for product in ["信立坦", "泰嘉"]:
-    #     # Page9 - 分隔页
-    #     ppt.add_sep_slide(f"{product}\n明细")
+    # Page6 - 电商渠道主要产品贡献月度趋势 - 金额
+    column = "主要客户"
 
-    #     query_str = f"主要产品=='{product}'"
+    # 计算不同时间段贡献份额的kpi
+    df_contrib = get_contrib_table(sales=sales_ecom, columns=column)
 
-    #     # Page10 - 目标产品零售vs.电商目标终端销售贡献月度趋势 - 金额
-    #     unit = "金额"
-    #     column = "事业部"
-    #     ppt.add_img_slide(
-    #         title=f"{product}零售vs.电商目标终端销售贡献月度趋势 - {unit}",
-    #         imgs=[
-    #             {
-    #                 "image_file": plot_sales_trend(
-    #                     sales=sales,
-    #                     query_str=query_str,
-    #                     show_target=False,
-    #                     column=column,
-    #                     height=4,
-    #                     show_total_label=True,
-    #                     label_threshold=20,
-    #                     title=f"{product}零售vs.电商目标终端销售贡献月度趋势 - {unit}",
-    #                 ),
-    #                 "width": Cm(32),
-    #             },
-    #             {
-    #                 "image_file": plot_sales_trend(
-    #                     sales=sales,
-    #                     query_str=query_str,
-    #                     show_target=False,
-    #                     column=column,
-    #                     height=4,
-    #                     plot_share=True,
-    #                     label_threshold=0.01,
-    #                     show_title=False,
-    #                 ),
-    #                 "width": Cm(32),
-    #                 "top": Cm(10.58),
-    #             },
-    #         ],
-    #         labels=[product, "零售+电商", unit],
-    #     )
+    ppt.add_img_slide(
+        title=f"电商渠道{column}贡献月度趋势 - {unit}",
+        imgs=[
+            {
+                "image_file": plot_sales_trend(
+                    sales=sales_ecom,
+                    query_str=query_str,
+                    show_target=False,
+                    column=column,
+                    width=13,
+                    height=4,
+                    show_total_label=True,
+                    label_threshold=20,
+                ),
+                "width": Cm(26),
+            },
+            {
+                "image_file": plot_sales_trend(
+                    sales=sales_ecom,
+                    query_str=query_str,
+                    show_target=False,
+                    column=column,
+                    width=13,
+                    height=4,
+                    plot_share=True,
+                    label_threshold=0.03,
+                    show_title=False,
+                ),
+                "width": Cm(26),
+                "top": Cm(10.58),
+            },
+        ],
+        labels=["所有产品", "分平台", unit],
+        tables=[{**TABLE_RIGHT_3ITEMS, **{"data": df_contrib}}],
+        textboxes=[TEXTBOX_TABLE_TITLE],
+    )
 
-    #     # Page11, 12 目标产品销售达成月度趋势及KPIs - 金额, 标准盒数
-    #     for unit in ["金额", "标准盒数"]:
-    #         ppt.add_img_slide(
-    #             title=f"{product}销售达成月度趋势及KPIs - {unit}",
-    #             imgs=[
-    #                 {
-    #                     "image_file": plot_sales_trend(
-    #                         sales=sales_ecom,
-    #                         query_str=query_str,
-    #                         column=None,
-    #                         show_table=True,
-    #                         height=3,
-    #                         unit=unit,
-    #                         show_label=False,
-    #                         show_total_label=True,
-    #                     ),
-    #                 }
-    #             ],
-    #             labels=[product, "所有平台", unit],
-    #         )
+    # Page7, 8, 9 - 京东平台销售达成月度趋势及KPIs - 金额
+    for platform in ["京东", "阿里", "其他"]:
+        query_str = f"主要客户=='{platform}'"
+        ppt.add_img_slide(
+            title=f"{platform}平台销售达成月度趋势及KPIs - {unit}",
+            imgs=[
+                {
+                    "image_file": plot_sales_trend(
+                        sales=sales_ecom,
+                        query_str=query_str,
+                        column=None,
+                        show_table=True,
+                        height=3,
+                        unit=unit,
+                        show_label=False,
+                        show_total_label=True,
+                    ),
+                }
+            ],
+            labels=["所有产品", platform, unit],
+        )
 
-    #     # Page11 目标产品金额&盒数&单价月度趋势
-    #     ppt.add_img_slide(
-    #         title=f"{product}金额&盒数&单价月度趋势",
-    #         imgs=[
-    #             {
-    #                 "image_file": plot_grid_metrics(
-    #                     sales=sales_ecom, query_str=query_str
-    #                 ),
-    #                 "width": Cm(32),
-    #             }
-    #         ],
-    #         labels=[product, "所有平台", "销量/价格"],
-    #     )
+    # Page10-32 - 信立坦、泰嘉明细
+    for product in ["信立坦", "泰嘉"]:
+        # Page10 - 分隔页
+        ppt.add_sep_slide(f"{product}\n明细")
 
-    #     # Page12 目标产品主要客户贡献月度趋势 – 金额
-    #     column = "主要客户"
-    #     ppt.add_img_slide(
-    #         title=f"{product}{column}贡献月度趋势 - {unit}",
-    #         imgs=[
-    #             {
-    #                 "image_file": plot_sales_trend(
-    #                     sales=sales_ecom,
-    #                     query_str=query_str,
-    #                     show_target=False,
-    #                     column=column,
-    #                     height=4,
-    #                     show_total_label=True,
-    #                     label_threshold=20,
-    #                 ),
-    #                 "width": Cm(32),
-    #             },
-    #             {
-    #                 "image_file": plot_sales_trend(
-    #                     sales=sales_ecom,
-    #                     query_str=query_str,
-    #                     show_target=False,
-    #                     column=column,
-    #                     height=4,
-    #                     plot_share=True,
-    #                     label_threshold=0.03,
-    #                     show_title=False,
-    #                 ),
-    #                 "width": Cm(32),
-    #                 "top": Cm(10.58),
-    #             },
-    #         ],
-    #         labels=[product, "分平台", unit],
-    #     )
+        query_str = f"主要产品=='{product}'"
 
-    #     # Page13-16 - 目标产品京东, 阿里平台销售达成月度趋势及KPIs - 金额, 标准盒数
-    #     for platform in ["京东", "阿里"]:
-    #         for unit in ["金额", "标准盒数"]:
-    #             query_str = f"主要产品=='{product}' and 主要客户=='{platform}'"
-    #             ppt.add_img_slide(
-    #                 title=f"{product}{platform}平台销售达成月度趋势及KPIs - {unit}",
-    #                 imgs=[
-    #                     {
-    #                         "image_file": plot_sales_trend(
-    #                             sales=sales_ecom,
-    #                             query_str=query_str,
-    #                             column=None,
-    #                             show_table=True,
-    #                             height=3,
-    #                             unit=unit,
-    #                             show_label=False,
-    #                             show_total_label=True,
-    #                         ),
-    #                     }
-    #                 ],
-    #                 labels=[product, platform, unit],
-    #             )
+        # Page11 - 电商渠道在信立坦整体发货中的贡献月度趋势
+        COLOR_DICT["MAT"] = "teal"
+        COLOR_DICT["MQT"] = "crimson"
+        COLOR_DICT["MON"] = "navy"
+        
+        ppt.add_img_slide(
+            title=f"电商渠道在{product}整体发货中的贡献月度趋势",
+            imgs=[
+                {
+                    "image_file": plot_ratio_trend(
+                        sales=sales_ecom,
+                        df_netsales=df_netsales,
+                        product=product,
+                        query_str=query_str,
+                        unit="金额",
+                        width=7,
+                    ),
+                    "top": Cm(4.3),
+                    "left": Cm(0.5),
+                    "width": None,
+                    "height": Cm(11.7),
+                },
+                {
+                    "image_file": plot_ratio_trend(
+                        sales=sales_ecom,
+                        df_netsales=df_netsales,
+                        product=product,
+                        query_str=query_str,
+                        unit="标准盒数",
+                        width=7,
+                    ),
+                    "top": Cm(4.3),
+                    "left": Cm(16.5),
+                    "width": None,
+                    "height": Cm(11.7),
+                },
+            ],
+            labels=[product, "所有平台", "金额/盒数"],
+        )
+        COLOR_DICT["MAT"] = "royalblue"
+        COLOR_DICT["MQT"] = "dodgerblue"
+        COLOR_DICT["MON"] = "deepskyblue"
+
+        # Page12 - 目标产品零售vs.电商目标终端销售贡献月度趋势 - 金额
+
+        unit = "金额"
+        column = "事业部"
+
+        # 计算不同时间段贡献份额的kpi
+        df_contrib = get_contrib_table(sales=sales, columns=column, query_str=query_str)
+
+        ppt.add_img_slide(
+            title=f"{product}零售vs.电商目标终端销售贡献月度趋势 - {unit}",
+            imgs=[
+                {
+                    "image_file": plot_sales_trend(
+                        sales=sales,
+                        query_str=query_str,
+                        show_target=False,
+                        column=column,
+                        width=13,
+                        height=4,
+                        show_total_label=True,
+                        label_threshold=20,
+                        title=f"{product}零售vs.电商目标终端销售贡献月度趋势 - {unit}",
+                    ),
+                    "width": Cm(26),
+                },
+                {
+                    "image_file": plot_sales_trend(
+                        sales=sales,
+                        query_str=query_str,
+                        show_target=False,
+                        column=column,
+                        width=13,
+                        height=4,
+                        plot_share=True,
+                        label_threshold=0.01,
+                        show_title=False,
+                    ),
+                    "width": Cm(26),
+                    "top": Cm(10.58),
+                },
+            ],
+            labels=[product, "零售+电商", unit],
+            tables=[{**TABLE_RIGHT_2ITEMS, **{"data": df_contrib}}],
+            textboxes=[TEXTBOX_TABLE_TITLE],
+        )
+
+        # Page13, 14 目标产品销售达成月度趋势及KPIs - 金额, 标准盒数
+        for unit in ["金额", "标准盒数"]:
+            ppt.add_img_slide(
+                title=f"{product}销售达成月度趋势及KPIs - {unit}",
+                imgs=[
+                    {
+                        "image_file": plot_sales_trend(
+                            sales=sales_ecom,
+                            query_str=query_str,
+                            column=None,
+                            show_table=True,
+                            height=3,
+                            unit=unit,
+                            show_label=False,
+                            show_total_label=True,
+                        ),
+                    }
+                ],
+                labels=[product, "所有平台", unit],
+            )
+
+        # Page15 目标产品金额&盒数&单价月度趋势
+        ppt.add_img_slide(
+            title=f"{product}金额&盒数&单价月度趋势",
+            imgs=[
+                {
+                    "image_file": plot_grid_metrics(
+                        sales=sales_ecom, query_str=query_str
+                    ),
+                    "width": Cm(32),
+                }
+            ],
+            labels=[product, "所有平台", "销量/价格"],
+        )
+
+        # Page16 目标产品主要客户贡献月度趋势 – 金额
+        column = "主要客户"
+        # 计算不同时间段贡献份额的kpi
+        df_contrib = get_contrib_table(
+            sales=sales_ecom, columns=column, query_str=query_str
+        )
+
+        ppt.add_img_slide(
+            title=f"{product}{column}贡献月度趋势 - {unit}",
+            imgs=[
+                {
+                    "image_file": plot_sales_trend(
+                        sales=sales_ecom,
+                        query_str=query_str,
+                        show_target=False,
+                        column=column,
+                        width=13,
+                        height=4,
+                        show_total_label=True,
+                        label_threshold=20 if product == "信立坦" else 5,
+                    ),
+                    "width": Cm(26),
+                },
+                {
+                    "image_file": plot_sales_trend(
+                        sales=sales_ecom,
+                        query_str=query_str,
+                        show_target=False,
+                        column=column,
+                        width=13,
+                        height=4,
+                        plot_share=True,
+                        label_threshold=0.03,
+                        show_title=False,
+                    ),
+                    "width": Cm(26),
+                    "top": Cm(10.58),
+                },
+            ],
+            labels=[product, "分平台", unit],
+            tables=[{**TABLE_RIGHT_3ITEMS, **{"data": df_contrib}}],
+            textboxes=[TEXTBOX_TABLE_TITLE],
+        )
+
+        # Page17-20 - 目标产品京东, 阿里平台销售达成月度趋势及KPIs - 金额, 标准盒数
+        for platform in ["京东", "阿里"]:
+            for unit in ["金额", "标准盒数"]:
+                query_str = f"主要产品=='{product}' and 主要客户=='{platform}'"
+                ppt.add_img_slide(
+                    title=f"{product}{platform}平台销售达成月度趋势及KPIs - {unit}",
+                    imgs=[
+                        {
+                            "image_file": plot_sales_trend(
+                                sales=sales_ecom,
+                                query_str=query_str,
+                                column=None,
+                                show_table=True,
+                                height=3,
+                                unit=unit,
+                                show_label=False,
+                                show_total_label=True,
+                            ),
+                        }
+                    ],
+                    labels=[product, platform, unit],
+                )
+
+    # Page32 - 泰嘉分品规销售金额贡献月度趋势
+    df = prepare_data(
+        data_old="raw data\现有架构看历史数据.xlsx",
+        data_new="raw data\Q1零售事业部&电商达成率表-核对初版.xlsx",
+        sheet_name="分品规",
+    )
+    mask = (
+        (df["事业部"] == "电商")
+        & (df["主要产品"] == "泰嘉")
+        & (
+            df["品规"].isin(
+                [
+                    "硫酸氢氯吡格雷片（泰嘉）25mg*20/瓶",
+                    "硫酸氢氯吡格雷片（泰嘉）75mg*7片/板*4板/盒",
+                    "硫酸氢氯吡格雷片（泰嘉）25mg*20/板*3板/盒",
+                    "硫酸氢氯吡格雷片（泰嘉）75mg*7/盒",
+                ]
+            )
+        )
+    )
+    df_ecom_talcom = df.loc[mask, :]
+    sales_ecom_talcom = MonthlySalesAnalyzer(
+        data=df_ecom_talcom, name="泰嘉电商销售", date_column="年月"
+    )
+
+    product = "泰嘉"
+    column = "品规"
+    unit = "金额"
+    query_str = "ilevel_0 in ilevel_0"
+
+    ppt.add_img_slide(
+        title=f"电商渠道{product}{column}贡献月度趋势 - {unit}",
+        imgs=[
+            {
+                "image_file": plot_sales_trend(
+                    sales=sales_ecom_talcom,
+                    query_str=query_str,
+                    show_target=False,
+                    column=column,
+                    height=4,
+                    show_total_label=True,
+                    label_threshold=5,
+                ),
+                "width": Cm(32),
+            },
+            {
+                "image_file": plot_sales_trend(
+                    sales=sales_ecom_talcom,
+                    query_str=query_str,
+                    show_target=False,
+                    column=column,
+                    height=4,
+                    plot_share=True,
+                    label_threshold=0.03,
+                    show_title=False,
+                ),
+                "width": Cm(32),
+                "top": Cm(10.58),
+            },
+        ],
+        labels=[product, "所有平台", unit],
+    )
 
     ppt.save()
