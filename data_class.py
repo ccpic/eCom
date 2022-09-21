@@ -11,7 +11,7 @@ FORMAT_GR = "{:+.1%}"
 FORMAT_CURRENCY = "¥{:,.0f}"
 
 D_SORTER = {
-    "年月": pd.date_range("2020-01", "2022-03", freq="MS").strftime("%Y-%m").tolist(),
+    "年月": pd.date_range("2020-01", "2022-07", freq="MS").strftime("%Y-%m").tolist(),
     "YTD": ["去年同期", "YTD销售"],
     "主要客户": ["京东", "阿里", "北京德开", "广东健客", "四川泉源堂", "仁和集团", "广东亮健", "其他"],
 }
@@ -365,6 +365,7 @@ class MonthlySalesAnalyzer(DfAnalyzer):
             aggfunc=sum,
             query_str=query_str,
         )
+
         value_ytd = df_value.loc[self.daterange_ytd, :].sum().values[0]
         value_ytdya = df_value.loc[self.daterange_ytdya, :].sum().values[0]
         value_mat = df_value.loc[self.daterange_mat, :].sum().values[0]

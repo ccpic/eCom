@@ -30,6 +30,10 @@ MYFONT = fm.FontProperties(fname="C:/Windows/Fonts/msyh.ttc")
 NUM_FONT = {"fontname": "Calibri"}
 
 COLOR_DICT = {
+    "内部发货 - 京东": "navy",
+    "终端纯销 - 京东": "crimson",
+    "内部发货 - 阿里": "navy",
+    "终端纯销 - 阿里": "crimson",
     "电商": "teal",
     "零售": "grey",
     "京东": "crimson",
@@ -545,6 +549,7 @@ class GridFigure(Figure):
 
         # 所有数据处理成列表格式
         self.data = data_to_list(data)
+        print(self.data)
         if table_data is not None:
             self.table_data = data_to_list(table_data)
 
@@ -698,6 +703,11 @@ class GridFigure(Figure):
                     ax.yaxis.set_ticks_position("left")
                     ax.xaxis.set_ticks_position("bottom")
 
+            # 隐藏图例
+            if "remove_legend" in self.style:
+                if self.style["remove_legend"] is True:
+                    ax.get_legend().remove()
+            
             # # x轴显示lim
             # if "xlim" in self.style:
             #     ax.set_xlim(self.style["xlim"][i][0], self.style["xlim"][i][1])
@@ -790,7 +800,7 @@ class PlotLine(GridFigure):
                                     idx,
                                     df.iloc[k, i],
                                     self.fmt[j].format(df.iloc[k, i]),
-                                    ha="right" if k ==0 else "left",
+                                    ha="right" if k == 0 else "left",
                                     va="center",
                                     size="small",
                                     color="white",
@@ -1302,11 +1312,14 @@ class PlotStackedBar(GridFigure):
                     else:
                         bottom = bottom_neg
                     # 如果有指定颜色就颜色，否则按预设列表选取
-                    if col in COLOR_DICT.keys():
-                        color = COLOR_DICT[col]
+                    if index in COLOR_DICT.keys():
+                        color = COLOR_DICT[index]
                     else:
-                        color = COLOR_LIST[i]
-
+                        if col in COLOR_DICT.keys():
+                            color = COLOR_DICT[col]
+                        else:
+                            color = COLOR_LIST[i]
+                        
                     # 绝对值bar图
                     if isinstance(df.index, pd.DatetimeIndex):  # 如果x轴是日期，宽度是以“天”为单位的
                         bar_width = 20

@@ -1,7 +1,7 @@
 from pyparsing import col
 import numpy as np
 import pandas as pd
-from data_class import MonthlySalesAnalyzer
+from data_class import MonthlySalesAnalyzer, D_SORTER
 from chart_class import (
     COLOR_DICT,
     PlotLine,
@@ -32,28 +32,37 @@ QUERY_STR_MAP = {
     "主要产品=='泰嘉' and 主要客户=='京东'": "京东-泰嘉",
     "主要产品=='泰嘉' and 主要客户=='阿里'": "阿里-泰嘉",
 }
+
+TABLE_BIG_ONE = {
+    "top": Cm(3.81),
+    "height": Cm(10.7),
+    "col1_width": Cm(2.5),
+    "width": Cm(30),
+    "left": Cm(1.48),
+}
+
 TABLE_RIGHT_2ITEMS = {
     "top": Cm(4.9),
     "left": Cm(26.5),
     "width": Cm(7),
     "height": Cm(10.7),
     "merge_cells": (
-        ((0, 0), (1, 0)),
-        ((2, 0), (3, 0)),
-        ((4, 0), (5, 0)),
-        ((6, 0), (7, 0)),
+        ((1, 0), (2, 0)),
+        ((3, 0), (4, 0)),
+        ((5, 0), (6, 0)),
+        ((7, 0), (8, 0)),
     ),
     "cell_color": {
-        (0, 0): RGBColor(0, 0, 128),
-        (2, 0): RGBColor(65, 105, 225),
-        (4, 0): RGBColor(30, 144, 255),
-        (6, 0): RGBColor(0, 191, 255),
+        (1, 0): RGBColor(0, 0, 128),
+        (3, 0): RGBColor(65, 105, 225),
+        (5, 0): RGBColor(30, 144, 255),
+        (7, 0): RGBColor(0, 191, 255),
     },
     "font_color": {
-        (0, 0): RGBColor(255, 255, 255),
-        (2, 0): RGBColor(255, 255, 255),
-        (4, 0): RGBColor(255, 255, 255),
-        (6, 0): RGBColor(255, 255, 255),
+        (1, 0): RGBColor(255, 255, 255),
+        (3, 0): RGBColor(255, 255, 255),
+        (5, 0): RGBColor(255, 255, 255),
+        (7, 0): RGBColor(255, 255, 255),
     },
 }
 
@@ -63,22 +72,22 @@ TABLE_RIGHT_3ITEMS = {
     "width": Cm(7),
     "height": Cm(10.7),
     "merge_cells": (
-        ((0, 0), (2, 0)),
-        ((3, 0), (5, 0)),
-        ((6, 0), (8, 0)),
-        ((9, 0), (11, 0)),
+        ((1, 0), (3, 0)),
+        ((4, 0), (6, 0)),
+        ((7, 0), (9, 0)),
+        ((10, 0), (12, 0)),
     ),
     "cell_color": {
-        (0, 0): RGBColor(0, 0, 128),
-        (3, 0): RGBColor(65, 105, 225),
-        (6, 0): RGBColor(30, 144, 255),
-        (9, 0): RGBColor(0, 191, 255),
+        (1, 0): RGBColor(0, 0, 128),
+        (4, 0): RGBColor(65, 105, 225),
+        (7, 0): RGBColor(30, 144, 255),
+        (10, 0): RGBColor(0, 191, 255),
     },
     "font_color": {
-        (0, 0): RGBColor(255, 255, 255),
-        (3, 0): RGBColor(255, 255, 255),
-        (6, 0): RGBColor(255, 255, 255),
-        (9, 0): RGBColor(255, 255, 255),
+        (1, 0): RGBColor(255, 255, 255),
+        (4, 0): RGBColor(255, 255, 255),
+        (7, 0): RGBColor(255, 255, 255),
+        (10, 0): RGBColor(255, 255, 255),
     },
 }
 
@@ -128,6 +137,9 @@ def get_contrib_table(
         v["贡献份额"] = v["贡献份额"].map("{:.1%}".format)
         v["同比"] = v["同比"].map("{:+.1%}".format)
         df_contrib = pd.concat([df_contrib, v])
+
+    df_contrib = df_contrib.set_index("周期")
+    df_contrib.rename(columns={"index": columns}, inplace=True)
 
     return df_contrib
 
@@ -182,10 +194,9 @@ class MonthlySalesPPT(object):
 
         print("Page%s" % str(int(self.prs.slides.index(slide)) + 1))
 
-    def add_img_slide(
+    def add_content_slide(
         self,
-        imgs: dict,
-        labels: list,
+        labels: None,
         title: str = None,
         layout_style: int = 0,
         *args,
@@ -195,8 +206,6 @@ class MonthlySalesPPT(object):
 
         Parameters
         ----------
-        img: dict,
-            包含要插入图片参数的字典
         title : str, optional
             slide标题, by default None
         layout_style : int, optional
@@ -272,16 +281,18 @@ class MonthlySalesPPT(object):
             obj_label.line.fill.background()  # 去除边框
 
         # 插入图片
-        for img in imgs:
-            obj_img = slide.shapes.add_picture(
-                image_file=img["image_file"],
-                top=img.get("top", IMAGE_TOP),
-                left=img.get("left", 0),
-                width=img.get("width", self.prs.slide_width),
-                height=img.get("height"),
-            )
-            if "left" in img is False:
-                obj_img.left = (self.prs.slide_width - obj_img.width) / 2  # 默认图片居中
+        imgs = kwargs.get("imgs")
+        if imgs is not None:
+            for img in imgs:
+                obj_img = slide.shapes.add_picture(
+                    image_file=img["image_file"],
+                    top=img.get("top", IMAGE_TOP),
+                    left=img.get("left", 0),
+                    width=img.get("width", self.prs.slide_width),
+                    height=img.get("height"),
+                )
+                if "left" in img is False:
+                    obj_img.left = (self.prs.slide_width - obj_img.width) / 2  # 默认图片居中
 
         # 插入表格
         tables = kwargs.get("tables")
@@ -290,8 +301,8 @@ class MonthlySalesPPT(object):
                 table_data = table.get("data")
 
                 shape_table = slide.shapes.add_table(
-                    rows=table.get("rows", table_data.shape[0]),
-                    cols=table.get("cols", table_data.shape[1]),
+                    rows=table.get("rows", table_data.shape[0] + 1),
+                    cols=table.get("cols", table_data.shape[1] + 1),
                     left=table.get("left", 0),
                     top=table.get("top", IMAGE_TOP),
                     width=table.get("width", self.prs.slide_width),
@@ -299,18 +310,75 @@ class MonthlySalesPPT(object):
                 )
                 obj_table = shape_table.table
 
+                # 第一列指定列宽
+                if table.get("col1_width") is not None:
+                    obj_table.columns[0].width = table.get("col1_width")
+
                 # 写入数据文本
                 for i, row in enumerate(obj_table.rows):
                     for j, cell in enumerate(row.cells):
-                        cell.vertical_anchor = MSO_VERTICAL_ANCHOR.MIDDLE  # 单元格文本居中（纵向）
-                        obj_table.cell(i, j).text = table_data.iloc[i, j]
-                        for paragraph in cell.text_frame.paragraphs:
-                            paragraph.alignment = PP_ALIGN.CENTER  # 单元格文本居中（横向）
-                            paragraph.runs[0].font.size = table.get("fontsize", Pt(11))
-                            if table_data.iloc[i, j][0] == "+":  # 正值着绿色
-                                paragraph.runs[0].font.color.rgb = RGBColor(0, 176, 80)
-                            elif table_data.iloc[i, j][0] == "-":  # 负值着红色
-                                paragraph.runs[0].font.color.rgb = RGBColor(255, 0, 0)
+                        try:
+                            label = table.get("label")
+                            if label is not None:
+                                obj_table.cell(0, 0).text = str(label)
+                                for paragraph in obj_table.cell(
+                                    0, 0
+                                ).text_frame.paragraphs:
+                                    paragraph.alignment = PP_ALIGN.CENTER  # 单元格文本居中（横向）
+                                    if len(paragraph.runs) > 0:
+                                        paragraph.runs[0].font.size = table.get(
+                                            "fontsize", Pt(11)
+                                        )
+                            cell.vertical_anchor = (
+                                MSO_VERTICAL_ANCHOR.MIDDLE
+                            )  # 单元格文本居中（纵向）
+                            obj_table.cell(i + 1, 0).text = str(
+                                table_data.index.values[i]
+                            )
+                            for paragraph in obj_table.cell(
+                                i + 1, 0
+                            ).text_frame.paragraphs:
+                                paragraph.alignment = PP_ALIGN.CENTER  # 单元格文本居中（横向）
+                                if len(paragraph.runs) > 0:
+                                    paragraph.runs[0].font.size = table.get(
+                                        "fontsize", Pt(11)
+                                    )
+                            obj_table.cell(0, j + 1).text = str(
+                                table_data.columns.values[j]
+                            )
+                            for paragraph in obj_table.cell(
+                                0, j + 1
+                            ).text_frame.paragraphs:
+                                paragraph.alignment = PP_ALIGN.CENTER  # 单元格文本居中（横向）
+                                if len(paragraph.runs) > 0:
+                                    paragraph.runs[0].font.size = table.get(
+                                        "fontsize", Pt(11)
+                                    )
+                            obj_table.cell(i + 1, j + 1).text = table_data.iloc[i, j]
+
+                            if table_data.iloc[i, j] in ["0", "0.0"]:  # 0值着灰色
+                                obj_table.cell(i + 1, j + 1).fill.solid()
+                                obj_table.cell(
+                                    i + 1, j + 1
+                                ).fill.fore_color.rgb = RGBColor(128, 128, 128)
+                            for paragraph in obj_table.cell(
+                                i + 1, j + 1
+                            ).text_frame.paragraphs:
+                                paragraph.alignment = PP_ALIGN.CENTER  # 单元格文本居中（横向）
+                                if len(paragraph.runs) > 0:
+                                    paragraph.runs[0].font.size = table.get(
+                                        "fontsize", Pt(11)
+                                    )
+                                    if table_data.iloc[i, j][0] == "+":  # 正值着绿色
+                                        paragraph.runs[0].font.color.rgb = RGBColor(
+                                            0, 176, 80
+                                        )
+                                    elif table_data.iloc[i, j][0] == "-":  # 负值着红色
+                                        paragraph.runs[0].font.color.rgb = RGBColor(
+                                            255, 0, 0
+                                        )
+                        except:
+                            continue
 
                 # 表格总样式
                 tbl_pr = shape_table._element.graphic.graphicData.tbl
@@ -332,7 +400,8 @@ class MonthlySalesPPT(object):
                         for paragraph in obj_table.cell(
                             cell_xy[0], cell_xy[1]
                         ).text_frame.paragraphs:
-                            paragraph.runs[0].font.color.rgb = font_color
+                            if len(paragraph.runs) > 0:
+                                paragraph.runs[0].font.color.rgb = font_color
 
                 # 处理合并单元格的事宜
                 if "merge_cells" in table:
@@ -399,10 +468,10 @@ def prepare_data(data_old: str, data_new: str, sheet_name: str) -> pd.DataFrame:
         "北京德开医药科技有限公司": "北京德开",
         "广东健客医药有限公司": "广东健客",
         "广东亮健药业有限公司": "广东亮键",
-        "北京好药师大药房连锁有限公司": "好药师大药房",
+        "北京好药师大药房连锁有限公司": "好药师",
         "四川泉源堂药业有限公司": "四川泉源堂",
         "仁和药房网国华（北京）医药有限公司": "仁和集团",
-        "广州方舟医药有限公司": "广东健客",
+        "广州方舟医药有限公司": "广州方舟",
         "广东康爱多连锁药店有限公司": "广东康爱多",
         "广东瑞美药业有限公司": "广东瑞美",
         "阿里健康大药房连锁有限公司（浙江）": "阿里",
@@ -433,12 +502,13 @@ def prepare_data(data_old: str, data_new: str, sheet_name: str) -> pd.DataFrame:
     df["主要客户"] = df["客户"].apply(lambda x: "其他" if x not in ["京东", "阿里"] else x)
 
     if sheet_name == "达成率":
-        df.rename(columns={"总销量": "销售盒数", "指标数量": "指标盒数"}, inplace=True)
+        df.rename(columns={"总销量": "销售盒数", "指标数量": "指标盒数", "品名": "产品"}, inplace=True)
         df["指标金额（万元）"] = df["指标金额（元）"] / 10000
         df["指标盒数（万盒）"] = df["指标盒数"] / 10000
     else:
         df.rename(
-            columns={"标准数量": "销售盒数", "当期销售金额": "销售金额（元）", "商品全称": "品规"}, inplace=True
+            columns={"标准数量": "销售盒数", "当期销售金额": "销售金额（元）", "商品全称": "品规", "品名": "产品"},
+            inplace=True,
         )
 
     df["销售金额（万元）"] = df["销售金额（元）"] / 10000
@@ -491,6 +561,81 @@ def plot_grid_metrics(
     )
 
     return f.plot(show_label=False, show_total_label=True)
+
+
+def plot_exfactory_terminal(
+    df_terminal: pd.DataFrame,
+    sales_exfactory: MonthlySalesAnalyzer,
+    product: str,
+    platform: str,
+    period: str = "MON",
+    width: float = 9,
+    height: float = 7,
+) -> str:
+    mask = df_terminal["品牌名称"] == product
+    df_terminal = df_terminal.loc[mask, :]
+
+    pivoted_terminal = pd.pivot_table(
+        data=df_terminal, columns="日期", values="标准销售数量", aggfunc=np.sum
+    )
+
+    pivoted_exfactory = sales_exfactory.get_pivot(
+        columns=sales_ecom.date_column,
+        query_str=f"主要产品=='{product}' and 主要客户=='{platform}'",
+        values="销售盒数",
+        aggfunc=np.sum,
+    ).reindex(
+        columns=pd.date_range("2022-01", "2022-07", freq="MS")
+        .strftime("%Y-%m")
+        .tolist()
+    )
+
+    # 每月出货纯销对比
+    pivoted_combined = pd.concat([pivoted_exfactory, pivoted_terminal])
+    pivoted_combined.index = [f"内部发货 - {platform}", f"终端纯销 - {platform}"]
+
+    if period == "MON":
+        title = f"月度内部发货 vs. 终端纯销  - {product} - {platform}"
+        fmt = [",.0f"]
+        f = plt.figure(
+            FigureClass=PlotLine,
+            savepath=sales.savepath,
+            data=pivoted_combined.transpose(),
+            fmt=fmt,
+            width=width,
+            height=height,
+            style={
+                "title": title,
+                # "remove_yticks": True,
+                "xlabel_rotation": 90,
+                "ylabel": "标准盒数",
+            },
+        )
+
+        return f.plot(cols_showlabel=pivoted_combined.index)
+    # YTD出货纯销对比
+    elif period == "YTD":
+        pivoted_sum = pivoted_combined.sum(axis=1).to_frame()
+
+        title = f"YTD内部发货 vs. 终端纯销  - {product} - {platform}"
+        fmt = [",.0f"]
+        f = plt.figure(
+            FigureClass=PlotStackedBar,
+            savepath=sales.savepath,
+            data=pivoted_sum.transpose(),
+            fmt=fmt,
+            width=width,
+            height=height,
+            style={
+                "title": title,
+                "remove_yticks": True,
+                # "xlabel_rotation": 90,
+                "ylabel": "标准盒数",
+                "remove_legend": True,
+            },
+        )
+
+        return f.plot()
 
 
 def plot_ratio_trend(
@@ -647,8 +792,8 @@ def plot_sales_trend(
 if __name__ == "__main__":
     # 数据
     df = prepare_data(
-        data_old="raw data\现有架构看历史数据.xlsx",
-        data_new="raw data\Q1零售事业部&电商达成率表-核对初版.xlsx",
+        data_old="raw data/现有架构看历史数据.xlsx",
+        data_new="raw data/2022零售事业部&电商达成率汇总表.xlsx",
         sheet_name="达成率",
     )
     df_ecom = df[df["事业部"] == "电商"]
@@ -656,10 +801,45 @@ if __name__ == "__main__":
     sales = MonthlySalesAnalyzer(data=df, name="零售+电商销售", date_column="年月")
     sales_ecom = MonthlySalesAnalyzer(data=df_ecom, name="电商销售", date_column="年月")
     month_str = sales_ecom.date.strftime("%Y%m")
+    print(month_str)
 
     df_netsales = pd.read_excel("netsales.xlsx", sheet_name="data", engine="openpyxl")
     df_netsales["年月"] = df_netsales["年月"].apply(lambda x: str(x)[:4] + "-" + str(x)[4:])
     df_netsales.set_index("年月", inplace=True)
+
+    # 京东纯销数据
+    df_terminal_jd = pd.read_excel(
+        "./raw data/京东纯销/京东纯销.xlsx", sheet_name="data", engine="openpyxl"
+    )
+    df_terminal_jd["日期"] = df_terminal_jd["时间"].apply(lambda x: x.strftime("%Y-%m"))
+
+    # 阿里纯销数据
+    df_terminal_al = pd.read_excel(
+        "./raw data/阿里纯销/阿里纯销.xlsx", sheet_name="data", engine="openpyxl"
+    )
+    df_terminal_al["日期"] = df_terminal_al["日期"].apply(lambda x: x[:7])
+    df_terminal_al.rename(columns={"纯净标准销售量": "标准销售数量"}, inplace=True)
+    D_PRODUCT_AL = {
+        "泰仪 替格瑞洛片 90mg*14片/盒 标准装": "泰仪",
+        "信达怡 盐酸贝那普利片 10mg*14片/盒 标准装": "信达怡",
+        "信达怡 盐酸贝那普利片 5mg*28片/盒": "信达怡",
+        "信达怡 盐酸贝那普利片 5mg*28片/盒 标准装": "信达怡",
+        "信立明 2mg*7片/盒 匹伐他汀钙片 标准装": "信立明",
+        "信立泰 10mg*28片/盒 利伐沙班片 标准装": "利伐沙班",
+        "信立泰 20mg*28片/盒 利伐沙班片 标准装": "利伐沙班",
+        "信立泰 75mg*28片/盒 泰嘉 硫酸氢氯吡格雷片 标准装": "泰嘉",
+        "信立泰 泰嘉 硫酸氢氯吡格雷片 25mg*20片*1瓶/盒 标准装": "泰嘉",
+        "信立泰 泰嘉 硫酸氢氯吡格雷片 25mg*60片/盒 标准装": "泰嘉",
+        "信立泰 泰嘉 硫酸氢氯吡格雷片 75mg*7片/盒 标准装": "泰嘉",
+        "信立泰 信立坦 阿利沙坦酯片 240mg*7片/盒 标准装": "信立坦",
+        "信立泰 信敏汀 地氯雷他定片 5mg*6片/盒": "信敏汀",
+        "信立泰 信敏汀 地氯雷他定片 5mg*6片/盒 标准装": "信敏汀",
+        "信立坦 阿利沙坦酯片 240mg*14片/盒 标准装": "信立坦",
+        "药品 信立泰 泰嘉 硫酸氢氯吡格雷片 75mg*7片/盒": "泰嘉",
+        "药品 信立泰 信立坦 阿利沙坦酯片 240mg*7片/盒": "信敏汀",
+        "药品信立泰 泰嘉 硫酸氢氯吡格雷片 25mg*20片*1瓶/盒": "泰嘉",
+    }
+    df_terminal_al["品牌名称"] = df_terminal_al["货品名称"].map(D_PRODUCT_AL)
 
     # 创建新ppt实例
     ppt = MonthlySalesPPT(
@@ -698,11 +878,12 @@ if __name__ == "__main__":
         font.size = Pt(16)
         font.color.rgb = RGBColor(255, 255, 255)
 
+
     # Page2 - 电商渠道整体销售达成月度趋势及KPIs - 金额
 
     query_str = "ilevel_0 in ilevel_0"
     unit = "金额"
-    ppt.add_img_slide(
+    ppt.add_content_slide(
         title=f"电商渠道整体销售达成月度趋势及KPIs - {unit}",
         imgs=[
             {
@@ -725,10 +906,10 @@ if __name__ == "__main__":
     COLOR_DICT["MAT"] = "teal"
     COLOR_DICT["MQT"] = "crimson"
     COLOR_DICT["MON"] = "navy"
-    
+
     product = "信立泰"
     unit = "金额"
-    ppt.add_img_slide(
+    ppt.add_content_slide(
         title=f"电商渠道在{product}整体发货中的贡献月度趋势 - {unit}",
         imgs=[
             {
@@ -743,18 +924,18 @@ if __name__ == "__main__":
         ],
         labels=["所有产品", "所有平台", unit],
     )
-    
+
     COLOR_DICT["MAT"] = "royalblue"
     COLOR_DICT["MQT"] = "dodgerblue"
     COLOR_DICT["MON"] = "deepskyblue"
-    
+
     # Page4 - 零售vs.电商目标终端销售贡献月度趋势 - 金额
     column = "事业部"
 
     # 计算不同时间段贡献份额的kpi
     df_contrib = get_contrib_table(sales=sales, columns=column)
 
-    ppt.add_img_slide(
+    ppt.add_content_slide(
         title=f"零售vs.电商目标终端销售贡献月度趋势 - {unit}",
         imgs=[
             {
@@ -798,7 +979,7 @@ if __name__ == "__main__":
     # 计算不同时间段贡献份额的kpi
     df_contrib = get_contrib_table(sales=sales_ecom, columns=column)
 
-    ppt.add_img_slide(
+    ppt.add_content_slide(
         title=f"电商渠道{column}贡献月度趋势 - {unit}",
         imgs=[
             {
@@ -835,13 +1016,37 @@ if __name__ == "__main__":
         textboxes=[TEXTBOX_TABLE_TITLE],
     )
 
-    # Page6 - 电商渠道主要产品贡献月度趋势 - 金额
+    # Page6 产品明细
+
+    column = "产品"
+
+    df_table = (
+        sales_ecom.get_pivot(
+            index=column,
+            columns=sales.date_column,
+            values="销售金额（万元）" if unit == "金额" else "销售盒数（万盒）",
+            aggfunc=sum,
+            query_str=query_str,
+        )
+        .fillna(0)
+        .applymap(lambda x: format(x, ",.0f"))
+    )
+
+    df_table = df_table.iloc[:, 12:]
+
+    ppt.add_content_slide(
+        title=f"电商渠道销售月度明细 - 分{column} - {unit}",
+        labels=["分产品", "所有平台", unit],
+        tables=[{**TABLE_BIG_ONE, **{"data": df_table, "label": "万元"}}],
+    )
+
+    # Page7 - 电商渠道主要客户贡献月度趋势 - 金额
     column = "主要客户"
 
     # 计算不同时间段贡献份额的kpi
     df_contrib = get_contrib_table(sales=sales_ecom, columns=column)
 
-    ppt.add_img_slide(
+    ppt.add_content_slide(
         title=f"电商渠道{column}贡献月度趋势 - {unit}",
         imgs=[
             {
@@ -878,10 +1083,34 @@ if __name__ == "__main__":
         textboxes=[TEXTBOX_TABLE_TITLE],
     )
 
-    # Page7, 8, 9 - 京东平台销售达成月度趋势及KPIs - 金额
+    # Page8 客户明细
+
+    column = "客户"
+
+    df_table = (
+        sales_ecom.get_pivot(
+            index=column,
+            columns=sales.date_column,
+            values="销售金额（万元）" if unit == "金额" else "销售盒数（万盒）",
+            aggfunc=sum,
+            query_str=query_str,
+        )
+        .fillna(0)
+        .applymap(lambda x: format(x, ",.0f"))
+    )
+
+    df_table = df_table.iloc[:, 12:]
+
+    ppt.add_content_slide(
+        title=f"电商渠道销售月度明细 - 分{column} - {unit}",
+        labels=["所有产品", "分平台", unit],
+        tables=[{**TABLE_BIG_ONE, **{"data": df_table, "label": "万元"}}],
+    )
+
+    # Page9, 10, 11 - 京东平台销售达成月度趋势及KPIs - 金额
     for platform in ["京东", "阿里", "其他"]:
         query_str = f"主要客户=='{platform}'"
-        ppt.add_img_slide(
+        ppt.add_content_slide(
             title=f"{platform}平台销售达成月度趋势及KPIs - {unit}",
             imgs=[
                 {
@@ -900,19 +1129,19 @@ if __name__ == "__main__":
             labels=["所有产品", platform, unit],
         )
 
-    # Page10-32 - 信立坦、泰嘉明细
+    # Page12-34 - 信立坦、泰嘉明细
     for product in ["信立坦", "泰嘉"]:
-        # Page10 - 分隔页
+        # Page12 - 分隔页
         ppt.add_sep_slide(f"{product}\n明细")
 
         query_str = f"主要产品=='{product}'"
 
-        # Page11 - 电商渠道在信立坦整体发货中的贡献月度趋势
+        # Page13 - 电商渠道在信立坦整体发货中的贡献月度趋势
         COLOR_DICT["MAT"] = "teal"
         COLOR_DICT["MQT"] = "crimson"
         COLOR_DICT["MON"] = "navy"
-        
-        ppt.add_img_slide(
+
+        ppt.add_content_slide(
             title=f"电商渠道在{product}整体发货中的贡献月度趋势",
             imgs=[
                 {
@@ -950,7 +1179,7 @@ if __name__ == "__main__":
         COLOR_DICT["MQT"] = "dodgerblue"
         COLOR_DICT["MON"] = "deepskyblue"
 
-        # Page12 - 目标产品零售vs.电商目标终端销售贡献月度趋势 - 金额
+        # Page14 - 目标产品零售vs.电商目标终端销售贡献月度趋势 - 金额
 
         unit = "金额"
         column = "事业部"
@@ -958,7 +1187,7 @@ if __name__ == "__main__":
         # 计算不同时间段贡献份额的kpi
         df_contrib = get_contrib_table(sales=sales, columns=column, query_str=query_str)
 
-        ppt.add_img_slide(
+        ppt.add_content_slide(
             title=f"{product}零售vs.电商目标终端销售贡献月度趋势 - {unit}",
             imgs=[
                 {
@@ -996,9 +1225,9 @@ if __name__ == "__main__":
             textboxes=[TEXTBOX_TABLE_TITLE],
         )
 
-        # Page13, 14 目标产品销售达成月度趋势及KPIs - 金额, 标准盒数
+        # Page15, 16 目标产品销售达成月度趋势及KPIs - 金额, 标准盒数
         for unit in ["金额", "标准盒数"]:
-            ppt.add_img_slide(
+            ppt.add_content_slide(
                 title=f"{product}销售达成月度趋势及KPIs - {unit}",
                 imgs=[
                     {
@@ -1017,8 +1246,8 @@ if __name__ == "__main__":
                 labels=[product, "所有平台", unit],
             )
 
-        # Page15 目标产品金额&盒数&单价月度趋势
-        ppt.add_img_slide(
+        # Page17 目标产品金额&盒数&单价月度趋势
+        ppt.add_content_slide(
             title=f"{product}金额&盒数&单价月度趋势",
             imgs=[
                 {
@@ -1031,14 +1260,14 @@ if __name__ == "__main__":
             labels=[product, "所有平台", "销量/价格"],
         )
 
-        # Page16 目标产品主要客户贡献月度趋势 – 金额
+        # Page18 目标产品主要客户贡献月度趋势 – 金额
         column = "主要客户"
         # 计算不同时间段贡献份额的kpi
         df_contrib = get_contrib_table(
             sales=sales_ecom, columns=column, query_str=query_str
         )
 
-        ppt.add_img_slide(
+        ppt.add_content_slide(
             title=f"{product}{column}贡献月度趋势 - {unit}",
             imgs=[
                 {
@@ -1075,11 +1304,11 @@ if __name__ == "__main__":
             textboxes=[TEXTBOX_TABLE_TITLE],
         )
 
-        # Page17-20 - 目标产品京东, 阿里平台销售达成月度趋势及KPIs - 金额, 标准盒数
+        # Page19-22 - 目标产品京东, 阿里平台销售达成月度趋势及KPIs - 金额, 标准盒数
         for platform in ["京东", "阿里"]:
             for unit in ["金额", "标准盒数"]:
                 query_str = f"主要产品=='{product}' and 主要客户=='{platform}'"
-                ppt.add_img_slide(
+                ppt.add_content_slide(
                     title=f"{product}{platform}平台销售达成月度趋势及KPIs - {unit}",
                     imgs=[
                         {
@@ -1098,10 +1327,76 @@ if __name__ == "__main__":
                     labels=[product, platform, unit],
                 )
 
-    # Page32 - 泰嘉分品规销售金额贡献月度趋势
+            # Page23 内部发货对比终端纯销
+            ppt.add_content_slide(
+                title=f"电商渠道内部发货 vs. 终端纯销  - {product} - {platform}",
+                imgs=[
+                    {
+                        "image_file": plot_exfactory_terminal(
+                            df_terminal=df_terminal_jd if platform == "京东" else df_terminal_al,
+                            sales_exfactory=sales_ecom,
+                            product=product,
+                            platform=platform,
+                            period="YTD",
+                            width=6,
+                            height=7,
+                        ),
+                        "left": Cm(1),
+                        "top": Cm(3.81),
+                        "width": Cm(13),
+                        "height": Cm(13),
+                    },
+                    {
+                        "image_file": plot_exfactory_terminal(
+                            df_terminal=df_terminal_jd if platform == "京东" else df_terminal_al,
+                            sales_exfactory=sales_ecom,
+                            product=product,
+                            platform=platform,
+                            period="MON",
+                        ),
+                        "left": Cm(13.58),
+                        "top": Cm(3.81),
+                        "width": Cm(20),
+                        "height": Cm(13),
+                    },
+                ],
+                labels=[product, platform, "标准盒数"],
+            )
+            
+        # Page24-25 产品明细
+        query_str = f"主要产品=='{product}'"
+        column = "客户"
+
+        for unit in ["金额", "标准盒数"]:
+            df_table = (
+                sales_ecom.get_pivot(
+                    index=column,
+                    columns=sales.date_column,
+                    values="销售金额（万元）" if unit == "金额" else "销售盒数（万盒）",
+                    aggfunc=sum,
+                    query_str=query_str,
+                )
+                .fillna(0)
+                .applymap(lambda x: format(x, ",.0f" if unit == "金额" else ",.1f"))
+            )
+
+            df_table = df_table.iloc[:, 12:]
+
+            ppt.add_content_slide(
+                title=f"{product}销售月度明细 - 分{column} - {unit}",
+                labels=[product, "分平台", unit],
+                tables=[
+                    {
+                        **TABLE_BIG_ONE,
+                        **{"data": df_table, "label": "万元" if unit == "金额" else "万盒"},
+                    }
+                ],
+            )
+
+    # Page42 - 泰嘉分品规销售金额贡献月度趋势
     df = prepare_data(
         data_old="raw data\现有架构看历史数据.xlsx",
-        data_new="raw data\Q1零售事业部&电商达成率表-核对初版.xlsx",
+        data_new="raw data/2022零售事业部&电商达成率汇总表.xlsx",
         sheet_name="分品规",
     )
     mask = (
@@ -1128,7 +1423,7 @@ if __name__ == "__main__":
     unit = "金额"
     query_str = "ilevel_0 in ilevel_0"
 
-    ppt.add_img_slide(
+    ppt.add_content_slide(
         title=f"电商渠道{product}{column}贡献月度趋势 - {unit}",
         imgs=[
             {
