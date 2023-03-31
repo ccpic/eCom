@@ -11,7 +11,7 @@ FORMAT_GR = "{:+.1%}"
 FORMAT_CURRENCY = "¥{:,.0f}"
 
 D_SORTER = {
-    "年月": pd.date_range("2020-01", "2022-07", freq="MS").strftime("%Y-%m").tolist(),
+    "年月": pd.date_range("2021-01", "2023-02", freq="MS").strftime("%Y-%m").tolist(),
     "YTD": ["去年同期", "YTD销售"],
     "主要客户": ["京东", "阿里", "北京德开", "广东健客", "四川泉源堂", "仁和集团", "广东亮健", "其他"],
 }
@@ -487,6 +487,8 @@ def get_pivot_diff(
     pd.DataFrame
         计算后的pandas dataframe，行为pivot表头，列为metrics
     """
+    
+    df[df < 0] = np.nan  # 展示share时先删除负数
     df_end = df.loc[end_period, :].sum().to_frame().apply(lambda x: x / x.sum())
     df_start = df.loc[start_period, :].sum().to_frame().apply(lambda x: x / x.sum())
     df_end[1] = df_end[0].subtract(df_start[0])

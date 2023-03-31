@@ -31,8 +31,10 @@ NUM_FONT = {"fontname": "Calibri"}
 
 COLOR_DICT = {
     "内部发货 - 京东": "navy",
+    "终端购进 - 京东": "navy",
     "终端纯销 - 京东": "crimson",
     "内部发货 - 阿里": "navy",
+    "终端购进 - 阿里": "navy",
     "终端纯销 - 阿里": "crimson",
     "电商": "teal",
     "零售": "grey",

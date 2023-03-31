@@ -19,6 +19,7 @@ from pptx.enum.shapes import MSO_SHAPE
 from pptx.dml.color import RGBColor
 from pptx.enum.text import PP_ALIGN, MSO_ANCHOR, MSO_VERTICAL_ANCHOR
 from datetime import datetime
+from data_class import D_SORTER
 
 QUERY_STR_MAP = {
     "ilevel_0 in ilevel_0": "总体",
@@ -576,27 +577,24 @@ def plot_exfactory_terminal(
     df_terminal = df_terminal.loc[mask, :]
 
     pivoted_terminal = pd.pivot_table(
-        data=df_terminal, columns="日期", values="标准销售数量", aggfunc=np.sum
-    )
+        data=df_terminal, columns="日期", values="标准盒数", aggfunc=np.sum
+    ).reindex(columns=D_SORTER["年月"][12:])
 
     pivoted_exfactory = sales_exfactory.get_pivot(
         columns=sales_ecom.date_column,
         query_str=f"主要产品=='{product}' and 主要客户=='{platform}'",
         values="销售盒数",
         aggfunc=np.sum,
-    ).reindex(
-        columns=pd.date_range("2022-01", "2022-07", freq="MS")
-        .strftime("%Y-%m")
-        .tolist()
-    )
+    ).reindex(columns=D_SORTER["年月"][12:])
 
     # 每月出货纯销对比
     pivoted_combined = pd.concat([pivoted_exfactory, pivoted_terminal])
-    pivoted_combined.index = [f"内部发货 - {platform}", f"终端纯销 - {platform}"]
+    pivoted_combined = pivoted_combined / 10000
+    pivoted_combined.index = [f"终端购进 - {platform}", f"终端纯销 - {platform}"]
 
     if period == "MON":
-        title = f"月度内部发货 vs. 终端纯销  - {product} - {platform}"
-        fmt = [",.0f"]
+        title = f"月度购进 vs. 终端纯销  - {product} - {platform}"
+        fmt = [",.1f"]
         f = plt.figure(
             FigureClass=PlotLine,
             savepath=sales.savepath,
@@ -608,17 +606,17 @@ def plot_exfactory_terminal(
                 "title": title,
                 # "remove_yticks": True,
                 "xlabel_rotation": 90,
-                "ylabel": "标准盒数",
+                "ylabel": "标准盒数（万盒）",
             },
         )
 
         return f.plot(cols_showlabel=pivoted_combined.index)
     # YTD出货纯销对比
     elif period == "YTD":
-        pivoted_sum = pivoted_combined.sum(axis=1).to_frame()
+        pivoted_sum = pivoted_combined.iloc[:, 12:].sum(axis=1).to_frame()
 
-        title = f"YTD内部发货 vs. 终端纯销  - {product} - {platform}"
-        fmt = [",.0f"]
+        title = f"YTD终端购进 vs. 终端纯销  - {product} - {platform}"
+        fmt = [",.1f"]
         f = plt.figure(
             FigureClass=PlotStackedBar,
             savepath=sales.savepath,
@@ -630,12 +628,12 @@ def plot_exfactory_terminal(
                 "title": title,
                 "remove_yticks": True,
                 # "xlabel_rotation": 90,
-                "ylabel": "标准盒数",
+                "ylabel": "标准盒数（万盒）",
                 "remove_legend": True,
             },
         )
 
-        return f.plot()
+        return f.plot(threshold=-100)
 
 
 def plot_ratio_trend(
@@ -666,7 +664,7 @@ def plot_ratio_trend(
         .div(df_netsales[f"{product}-{unit}"].rolling(3).sum())
     )
     df_contrib["MON"] = series_ecom.div(df_netsales[f"{product}-{unit}"])
-    df_contrib = df_contrib.iloc[12:, :]
+    df_contrib = df_contrib.iloc[24:, :]
 
     title = f"电商渠道在{product}整体发货中的贡献月度趋势 - {unit}"
     fmt = [".1%"]
@@ -725,7 +723,10 @@ def plot_sales_trend(
     ).iloc[12:, :]
 
     if plot_share:
-        monthly_sales = monthly_sales.apply(lambda x: x / x.sum(), axis=1)
+        monthly_sales[monthly_sales < 0] = np.nan  # 展示share时先删除负数
+        monthly_sales = monthly_sales.apply(lambda x: x / x.sum(), axis=1).reindex(
+            D_SORTER["年月"][12:]
+        )
         fmt = [".0%"]
         show_total_label = False
     else:
@@ -793,7 +794,7 @@ if __name__ == "__main__":
     # 数据
     df = prepare_data(
         data_old="raw data/现有架构看历史数据.xlsx",
-        data_new="raw data/2022零售事业部&电商达成率汇总表.xlsx",
+        data_new="raw data/零售事业部&电商达成率汇总表.xlsx",
         sheet_name="达成率",
     )
     df_ecom = df[df["事业部"] == "电商"]
@@ -809,37 +810,20 @@ if __name__ == "__main__":
 
     # 京东纯销数据
     df_terminal_jd = pd.read_excel(
-        "./raw data/京东纯销/京东纯销.xlsx", sheet_name="data", engine="openpyxl"
+        "./raw data/纯销数据/纯销数据.xlsx", sheet_name="京东出库", engine="openpyxl"
     )
-    df_terminal_jd["日期"] = df_terminal_jd["时间"].apply(lambda x: x.strftime("%Y-%m"))
-
+    df_terminal_jd["日期"] = df_terminal_jd["时间"].astype(str).apply(lambda x: x[:7])
+    df_terminal_jd["品牌名称"] = (
+        df_terminal_jd["商品规格标准表达"].astype(str).apply(lambda x: x.split("【")[0])
+    )
     # 阿里纯销数据
     df_terminal_al = pd.read_excel(
-        "./raw data/阿里纯销/阿里纯销.xlsx", sheet_name="data", engine="openpyxl"
+        "./raw data/纯销数据/纯销数据.xlsx", sheet_name="阿里出库", engine="openpyxl"
     )
-    df_terminal_al["日期"] = df_terminal_al["日期"].apply(lambda x: x[:7])
-    df_terminal_al.rename(columns={"纯净标准销售量": "标准销售数量"}, inplace=True)
-    D_PRODUCT_AL = {
-        "泰仪 替格瑞洛片 90mg*14片/盒 标准装": "泰仪",
-        "信达怡 盐酸贝那普利片 10mg*14片/盒 标准装": "信达怡",
-        "信达怡 盐酸贝那普利片 5mg*28片/盒": "信达怡",
-        "信达怡 盐酸贝那普利片 5mg*28片/盒 标准装": "信达怡",
-        "信立明 2mg*7片/盒 匹伐他汀钙片 标准装": "信立明",
-        "信立泰 10mg*28片/盒 利伐沙班片 标准装": "利伐沙班",
-        "信立泰 20mg*28片/盒 利伐沙班片 标准装": "利伐沙班",
-        "信立泰 75mg*28片/盒 泰嘉 硫酸氢氯吡格雷片 标准装": "泰嘉",
-        "信立泰 泰嘉 硫酸氢氯吡格雷片 25mg*20片*1瓶/盒 标准装": "泰嘉",
-        "信立泰 泰嘉 硫酸氢氯吡格雷片 25mg*60片/盒 标准装": "泰嘉",
-        "信立泰 泰嘉 硫酸氢氯吡格雷片 75mg*7片/盒 标准装": "泰嘉",
-        "信立泰 信立坦 阿利沙坦酯片 240mg*7片/盒 标准装": "信立坦",
-        "信立泰 信敏汀 地氯雷他定片 5mg*6片/盒": "信敏汀",
-        "信立泰 信敏汀 地氯雷他定片 5mg*6片/盒 标准装": "信敏汀",
-        "信立坦 阿利沙坦酯片 240mg*14片/盒 标准装": "信立坦",
-        "药品 信立泰 泰嘉 硫酸氢氯吡格雷片 75mg*7片/盒": "泰嘉",
-        "药品 信立泰 信立坦 阿利沙坦酯片 240mg*7片/盒": "信敏汀",
-        "药品信立泰 泰嘉 硫酸氢氯吡格雷片 25mg*20片*1瓶/盒": "泰嘉",
-    }
-    df_terminal_al["品牌名称"] = df_terminal_al["货品名称"].map(D_PRODUCT_AL)
+    df_terminal_al["日期"] = df_terminal_al["日期"].astype(str).apply(lambda x: x[:7])
+    df_terminal_al["品牌名称"] = (
+        df_terminal_al["商品规格标准表达"].astype(str).apply(lambda x: x.split("【")[0])
+    )
 
     # 创建新ppt实例
     ppt = MonthlySalesPPT(
@@ -849,7 +833,7 @@ if __name__ == "__main__":
     # 母版
     slide = ppt.prs.slide_layouts[0]
     note = slide.shapes[5].text_frame.paragraphs[0]
-    note.text = f"数据源: 电商发货数据202001-{month_str}, 当前客户看历史"
+    note.text = f"数据源: 电商购进达成数据202101-{month_str}, 当前客户看历史"
     font = note.runs[0].font
     font.italic = True
     font.size = Pt(8)
@@ -857,7 +841,7 @@ if __name__ == "__main__":
     # Page1 总标题页
     slide = ppt.prs.slides[0]
     title = slide.shapes[0].text_frame
-    title.text = f"新专药\n电商渠道\n发货达成\n数据简报"
+    title.text = f"新专药\n电商渠道\n购进达成\n数据简报"
     for para in title.paragraphs:
         font = para.runs[0].font
         font.size = Pt(32)
@@ -877,7 +861,6 @@ if __name__ == "__main__":
         font = para.runs[0].font
         font.size = Pt(16)
         font.color.rgb = RGBColor(255, 255, 255)
-
 
     # Page2 - 电商渠道整体销售达成月度趋势及KPIs - 金额
 
@@ -1329,11 +1312,13 @@ if __name__ == "__main__":
 
             # Page23 内部发货对比终端纯销
             ppt.add_content_slide(
-                title=f"电商渠道内部发货 vs. 终端纯销  - {product} - {platform}",
+                title=f"电商渠道终端购进 vs. 终端纯销  - {product} - {platform}",
                 imgs=[
                     {
                         "image_file": plot_exfactory_terminal(
-                            df_terminal=df_terminal_jd if platform == "京东" else df_terminal_al,
+                            df_terminal=df_terminal_jd
+                            if platform == "京东"
+                            else df_terminal_al,
                             sales_exfactory=sales_ecom,
                             product=product,
                             platform=platform,
@@ -1348,7 +1333,9 @@ if __name__ == "__main__":
                     },
                     {
                         "image_file": plot_exfactory_terminal(
-                            df_terminal=df_terminal_jd if platform == "京东" else df_terminal_al,
+                            df_terminal=df_terminal_jd
+                            if platform == "京东"
+                            else df_terminal_al,
                             sales_exfactory=sales_ecom,
                             product=product,
                             platform=platform,
@@ -1362,7 +1349,7 @@ if __name__ == "__main__":
                 ],
                 labels=[product, platform, "标准盒数"],
             )
-            
+
         # Page24-25 产品明细
         query_str = f"主要产品=='{product}'"
         column = "客户"
@@ -1393,67 +1380,131 @@ if __name__ == "__main__":
                 ],
             )
 
-    # Page42 - 泰嘉分品规销售金额贡献月度趋势
-    df = prepare_data(
-        data_old="raw data\现有架构看历史数据.xlsx",
-        data_new="raw data/2022零售事业部&电商达成率汇总表.xlsx",
-        sheet_name="分品规",
-    )
-    mask = (
-        (df["事业部"] == "电商")
-        & (df["主要产品"] == "泰嘉")
-        & (
-            df["品规"].isin(
-                [
-                    "硫酸氢氯吡格雷片（泰嘉）25mg*20/瓶",
-                    "硫酸氢氯吡格雷片（泰嘉）75mg*7片/板*4板/盒",
-                    "硫酸氢氯吡格雷片（泰嘉）25mg*20/板*3板/盒",
-                    "硫酸氢氯吡格雷片（泰嘉）75mg*7/盒",
-                ]
+        if product == "信立坦":
+            # Page42 - 泰嘉分品规销售金额贡献月度趋势
+            df = prepare_data(
+                data_old="raw data\现有架构看历史数据.xlsx",
+                data_new="raw data/零售事业部&电商达成率汇总表.xlsx",
+                sheet_name="分品规",
             )
-        )
-    )
-    df_ecom_talcom = df.loc[mask, :]
-    sales_ecom_talcom = MonthlySalesAnalyzer(
-        data=df_ecom_talcom, name="泰嘉电商销售", date_column="年月"
-    )
+            mask = (
+                (df["事业部"] == "电商")
+                & (df["主要产品"] == "信立坦")
+                # & (
+                #     df["品规"].isin(
+                #         [
+                #             "硫酸氢氯吡格雷片（泰嘉）25mg*20/瓶",
+                #             "硫酸氢氯吡格雷片（泰嘉）75mg*7片/板*4板/盒",
+                #             "硫酸氢氯吡格雷片（泰嘉）25mg*20/板*3板/盒",
+                #             "硫酸氢氯吡格雷片（泰嘉）75mg*7/盒",
+                #         ]
+                #     )
+                # )
+            )
+            df_ecom_talcom = df.loc[mask, :]
+            sales_ecom_talcom = MonthlySalesAnalyzer(
+                data=df_ecom_talcom, name="信立坦电商销售", date_column="年月"
+            )
 
-    product = "泰嘉"
-    column = "品规"
-    unit = "金额"
-    query_str = "ilevel_0 in ilevel_0"
+            product = "信立坦"
+            column = "品规"
+            unit = "金额"
+            query_str = "ilevel_0 in ilevel_0"
 
-    ppt.add_content_slide(
-        title=f"电商渠道{product}{column}贡献月度趋势 - {unit}",
-        imgs=[
-            {
-                "image_file": plot_sales_trend(
-                    sales=sales_ecom_talcom,
-                    query_str=query_str,
-                    show_target=False,
-                    column=column,
-                    height=4,
-                    show_total_label=True,
-                    label_threshold=5,
-                ),
-                "width": Cm(32),
-            },
-            {
-                "image_file": plot_sales_trend(
-                    sales=sales_ecom_talcom,
-                    query_str=query_str,
-                    show_target=False,
-                    column=column,
-                    height=4,
-                    plot_share=True,
-                    label_threshold=0.03,
-                    show_title=False,
-                ),
-                "width": Cm(32),
-                "top": Cm(10.58),
-            },
-        ],
-        labels=[product, "所有平台", unit],
-    )
+            ppt.add_content_slide(
+                title=f"电商渠道{product}{column}贡献月度趋势 - {unit}",
+                imgs=[
+                    {
+                        "image_file": plot_sales_trend(
+                            sales=sales_ecom_talcom,
+                            query_str=query_str,
+                            show_target=False,
+                            column=column,
+                            height=4,
+                            show_total_label=True,
+                            label_threshold=5,
+                        ),
+                        "width": Cm(32),
+                    },
+                    {
+                        "image_file": plot_sales_trend(
+                            sales=sales_ecom_talcom,
+                            query_str=query_str,
+                            show_target=False,
+                            column=column,
+                            height=4,
+                            plot_share=True,
+                            label_threshold=0.03,
+                            show_title=False,
+                        ),
+                        "width": Cm(32),
+                        "top": Cm(10.58),
+                    },
+                ],
+                labels=[product, "所有平台", unit],
+            )
+        elif product == "泰嘉":
+            # Page42 - 泰嘉分品规销售金额贡献月度趋势
+            df = prepare_data(
+                data_old="raw data\现有架构看历史数据.xlsx",
+                data_new="raw data/零售事业部&电商达成率汇总表.xlsx",
+                sheet_name="分品规",
+            )
+            mask = (
+                (df["事业部"] == "电商")
+                & (df["主要产品"] == "泰嘉")
+                & (
+                    df["品规"].isin(
+                        [
+                            "硫酸氢氯吡格雷片（泰嘉）25mg*20/瓶",
+                            "硫酸氢氯吡格雷片（泰嘉）75mg*7片/板*4板/盒",
+                            "硫酸氢氯吡格雷片（泰嘉）25mg*20/板*3板/盒",
+                            "硫酸氢氯吡格雷片（泰嘉）75mg*7/盒",
+                        ]
+                    )
+                )
+            )
+            df_ecom_talcom = df.loc[mask, :]
+            sales_ecom_talcom = MonthlySalesAnalyzer(
+                data=df_ecom_talcom, name="泰嘉电商销售", date_column="年月"
+            )
+
+            product = "泰嘉"
+            column = "品规"
+            unit = "金额"
+            query_str = "ilevel_0 in ilevel_0"
+
+            ppt.add_content_slide(
+                title=f"电商渠道{product}{column}贡献月度趋势 - {unit}",
+                imgs=[
+                    {
+                        "image_file": plot_sales_trend(
+                            sales=sales_ecom_talcom,
+                            query_str=query_str,
+                            show_target=False,
+                            column=column,
+                            height=4,
+                            show_total_label=True,
+                            label_threshold=5,
+                        ),
+                        "width": Cm(32),
+                    },
+                    {
+                        "image_file": plot_sales_trend(
+                            sales=sales_ecom_talcom,
+                            query_str=query_str,
+                            show_target=False,
+                            column=column,
+                            height=4,
+                            plot_share=True,
+                            label_threshold=0.03,
+                            show_title=False,
+                        ),
+                        "width": Cm(32),
+                        "top": Cm(10.58),
+                    },
+                ],
+                labels=[product, "所有平台", unit],
+            )
 
     ppt.save()
